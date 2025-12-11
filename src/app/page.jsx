@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import RadioPlayer from "../components/radio-player";
 import { useUpload } from "../utilities/runtime-helpers";
 
@@ -58,7 +58,11 @@ function MainComponent() {
   const [menuLoading, setMenuLoading] = useState(false);
   const [menuError, setMenuError] = useState(null);
   const [lastSelectedCity, setLastSelectedCity] = useState(() => {
-    return localStorage.getItem("lastSelectedCity") || "";
+    // Provera da li se kod izvršava na klijentu pre pristupa localStorage-u
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem("lastSelectedCity") || "";
+    }
+    return "";
   });
   const [debugInfo, setDebugInfo] = useState({});
 
