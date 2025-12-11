@@ -1,19 +1,10 @@
 "use client";
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 
-
-
-export default function Index() {
-  return (function MainComponent({ isOpen, onClose }) {
+export default function RadioPlayer({ isOpen, onClose }) {
   const [activeStation, setActiveStation] = useState(null);
   const [volume, setVolume] = useState(0.5);
   const [searchTerm, setSearchTerm] = useState('');
-  const [streamInfo, setStreamInfo] = useState({
-    title: '',
-    artist: '',
-    isLoading: false,
-    error: null
-  });
   const audioRef = useRef(null);
 
   const radioStations = [
@@ -59,6 +50,12 @@ export default function Index() {
     station.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [volume]);
+
   const togglePlay = (station) => {
     if (audioRef.current) {
       if (activeStation?.id === station.id) {
@@ -66,7 +63,7 @@ export default function Index() {
         setActiveStation(null);
       } else {
         audioRef.current.src = station.streamUrl;
-        audioRef.current.play();
+        audioRef.current.play().catch(e => console.error("Error playing:", e));
         setActiveStation(station);
       }
     }
@@ -200,21 +197,4 @@ export default function Index() {
       `}</style>
     </div>
   );
-}
-
-function StoryComponent() {
-  const [isOpen, setIsOpen] = useState(false);
-
-  return (
-    <div className="p-4">
-      <button 
-        onClick={() => setIsOpen(true)}
-        className="bg-[#00bfa5] text-white px-4 py-2 rounded-lg hover:bg-[#00a693] transition-colors"
-      >
-        Open Radio Player
-      </button>
-      <MainComponent isOpen={isOpen} onClose={() => setIsOpen(false)} />
-    </div>
-  );
-});
 }
