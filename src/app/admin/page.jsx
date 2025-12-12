@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react"; // <--- OVO JE NEDOSTAJALO!
+import React, { useState, useEffect } from "react";
 
 function MainComponent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -93,21 +93,23 @@ function MainComponent() {
   const verifyPassword = async () => {
     setLoading(true);
     try {
-      // ISPRAVLJENA PUTANJA:
+      // *** ISPRAVLJENA PUTANJA (bilo je verify-admin-password) ***
       const response = await fetch("/api/verify-admin", {
         method: "POST",
         body: JSON.stringify({ password }),
       });
+      
       const data = await response.json();
 
-      if (data.success) {
+      if (response.ok && data.success) {
         setIsAuthenticated(true);
         setError("");
       } else {
-        setError(data.error || "Greška pri verifikaciji");
+        setError(data.error || "Pogrešna lozinka");
       }
     } catch (err) {
-      setError("Došlo je do greške");
+      console.error(err);
+      setError("Došlo je do greške pri povezivanju sa serverom");
     }
     setLoading(false);
   };
@@ -145,111 +147,66 @@ function MainComponent() {
   return (
     <div className="min-h-screen bg-gray-100 text-black">
       <div className="flex">
+        {/* Sidebar */}
         <div className="w-64 bg-white h-screen shadow-md">
           <div className="p-4">
-            <h1 className="text-xl font-bold font-roboto">Admin Panel</h1>
+            <h1 className="text-xl font-bold">Admin Panel</h1>
           </div>
           <nav className="mt-4">
-            {[
-              { id: "dashboard", name: "Dashboard", icon: "fa-chart-line" },
-              { id: "cities", name: "Gradovi", icon: "fa-city" },
-              { id: "restaurants", name: "Restorani", icon: "fa-utensils" },
-              { id: "menu", name: "Meni", icon: "fa-book-open" },
-              { id: "users", name: "Korisnici", icon: "fa-users" },
-              { id: "reviews", name: "Recenzije", icon: "fa-star" },
-              { id: "points", name: "Poeni", icon: "fa-coins" },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full text-left p-3 flex items-center space-x-3 hover:bg-gray-100 transition-colors ${
-                  activeTab === tab.id ? "bg-gray-100" : ""
-                }`}
-              >
-                <i className={`fas ${tab.icon} w-6`}></i>
-                <span>{tab.name}</span>
-              </button>
-            ))}
+            <button onClick={() => setActiveTab("dashboard")} className={`w-full text-left p-3 hover:bg-gray-100 ${activeTab === "dashboard" ? "bg-gray-100" : ""}`}>Dashboard</button>
+            <button onClick={() => setActiveTab("restaurants")} className={`w-full text-left p-3 hover:bg-gray-100 ${activeTab === "restaurants" ? "bg-gray-100" : ""}`}>Restorani</button>
           </nav>
         </div>
 
+        {/* Main Content */}
         <div className="flex-1 p-8">
           <div className="bg-white rounded-lg shadow-md p-6">
+            
             {activeTab === "dashboard" && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-blue-50 p-6 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">Ukupno korisnika</h3>
-                    <i className="fas fa-users text-blue-500 text-xl"></i>
-                  </div>
-                  <p className="text-3xl font-bold mt-2">0</p>
-                </div>
-                {/* ... Ostale statistike ... */}
+              <div>
+                <h2 className="text-xl font-bold mb-4">Dobrodošao nazad!</h2>
+                <p>Izaberi opciju iz menija sa leve strane.</p>
               </div>
             )}
 
-            {/* RESTORANI TAB */}
             {activeTab === "restaurants" && (
               <div>
                 <h2 className="text-xl font-bold mb-4">Upravljanje restoranima</h2>
-                <div className="mb-6 space-y-4">
+                
+                {/* Forma */}
+                <div className="mb-6 space-y-4 p-4 bg-gray-50 rounded">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Ime restorana</label>
-                      <input type="text" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="npr. Caffe Club 22" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Grad</label>
-                      <select value={city} onChange={(e) => setCity(e.target.value)} className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="Nova Pazova">Nova Pazova</option>
-                        <option value="Stara Pazova">Stara Pazova</option>
-                        <option value="Banovci">Banovci</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Adresa</label>
-                      <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="npr. Karađorđeva 10" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Telefon</label>
-                      <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="npr. 0631234567" />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium mb-1">Radno vreme</label>
-                      <input type="text" value={workHours} onChange={(e) => setWorkHours(e.target.value)} className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="08:00 - 23:00" />
-                    </div>
+                    <input type="text" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} className="p-2 border rounded" placeholder="Ime restorana" />
+                    <select value={city} onChange={(e) => setCity(e.target.value)} className="p-2 border rounded">
+                      <option value="Nova Pazova">Nova Pazova</option>
+                      <option value="Stara Pazova">Stara Pazova</option>
+                      <option value="Banovci">Banovci</option>
+                    </select>
+                    <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} className="p-2 border rounded" placeholder="Adresa" />
+                    <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} className="p-2 border rounded" placeholder="Telefon" />
+                    <input type="text" value={workHours} onChange={(e) => setWorkHours(e.target.value)} className="p-2 border rounded md:col-span-2" placeholder="Radno vreme" />
                   </div>
                   {restaurantError && <p className="text-red-500 text-sm">{restaurantError}</p>}
-                  <button type="button" onClick={handleAddRestaurant} disabled={restaurantLoading || !restaurantName || !city || !address} className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 transition-colors disabled:bg-blue-300">
+                  <button onClick={handleAddRestaurant} disabled={restaurantLoading} className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
                     {restaurantLoading ? 'Dodavanje...' : 'Dodaj restoran'}
                   </button>
                 </div>
-                
-                <h3 className="text-lg font-bold mb-2">Postojeći restorani</h3>
-                {restaurantsList.length === 0 ? (
-                  <p className="text-gray-600">Nema restorana</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {restaurantsList.map((r) => (
-                      <li key={r.id} className="flex items-center justify-between p-3 border rounded">
-                        <div>
-                          <p className="font-medium">{r.name}</p>
-                          <p className="text-sm text-gray-600">{r.city} • {r.address}</p>
-                        </div>
-                        <button type="button" onClick={() => handleDeleteRestaurant(r.id)} className="text-red-500 hover:underline">Obriši</button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+
+                {/* Lista */}
+                <div className="space-y-2">
+                  {restaurantsList.map((r) => (
+                    <div key={r.id} className="flex justify-between items-center p-3 border rounded hover:bg-gray-50">
+                      <div>
+                        <p className="font-bold">{r.name}</p>
+                        <p className="text-sm text-gray-600">{r.city}, {r.address}</p>
+                      </div>
+                      <button onClick={() => handleDeleteRestaurant(r.id)} className="text-red-500 hover:text-red-700">Obriši</button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
-            
-            {/* Ostali tabovi (samo placeholderi da ne bude prazno) */}
-            {activeTab === "cities" && <div><h2>Gradovi</h2><p>Podešavanje gradova...</p></div>}
-            {activeTab === "menu" && <div><h2>Meni</h2><p>Podešavanje menija...</p></div>}
-            {activeTab === "users" && <div><h2>Korisnici</h2><p>Pregled korisnika...</p></div>}
-            {activeTab === "reviews" && <div><h2>Recenzije</h2><p>Moderacija recenzija...</p></div>}
-            {activeTab === "points" && <div><h2>Poeni</h2><p>Konfiguracija poena...</p></div>}
+
           </div>
         </div>
       </div>
