@@ -18,12 +18,10 @@ function MainComponent() {
   const [restaurantLoading, setRestaurantLoading] = useState(false);
   const [restaurantError, setRestaurantError] = useState("");
 
-  // Load restaurants when the restaurants tab is active
   useEffect(() => {
     if (activeTab === "restaurants") {
       loadRestaurants();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const loadRestaurants = async () => {
@@ -93,7 +91,7 @@ function MainComponent() {
   const verifyPassword = async () => {
     setLoading(true);
     try {
-      // --- ISPRAVLJENA PUTANJA OVDE (bilo je verify-admin-password) ---
+      // *** OVDE JE BILA GREŠKA, SAD JE ISPRAVLJENO ***
       const response = await fetch("/api/verify-admin", {
         method: "POST",
         body: JSON.stringify({ password }),
@@ -203,166 +201,69 @@ function MainComponent() {
 
             {activeTab === "cities" && (
               <div>
-                <h2 className="text-xl font-bold mb-4">
-                  Upravljanje gradovima
-                </h2>
-                <p className="text-gray-600">
-                  Ovde će biti forma za upravljanje gradovima
-                </p>
+                <h2 className="text-xl font-bold mb-4">Upravljanje gradovima</h2>
+                <p className="text-gray-600">Ovde će biti forma za upravljanje gradovima</p>
               </div>
             )}
 
             {activeTab === "restaurants" && (
               <div>
-                <h2 className="text-xl font-bold mb-4">
-                  Upravljanje restoranima
-                </h2>
-                {/* Forma za dodavanje novog restorana */}
+                <h2 className="text-xl font-bold mb-4">Upravljanje restoranima</h2>
                 <div className="mb-6 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium mb-1">
-                        Ime restorana
-                      </label>
-                      <input
-                        type="text"
-                        value={restaurantName}
-                        onChange={(e) => setRestaurantName(e.target.value)}
-                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="npr. Caffe Club 22"
-                      />
+                      <label className="block text-sm font-medium mb-1">Ime restorana</label>
+                      <input type="text" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="npr. Caffe Club 22" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">
-                        Grad
-                      </label>
-                      <select
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
+                      <label className="block text-sm font-medium mb-1">Grad</label>
+                      <select value={city} onChange={(e) => setCity(e.target.value)} className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="Nova Pazova">Nova Pazova</option>
                         <option value="Stara Pazova">Stara Pazova</option>
                         <option value="Banovci">Banovci</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">
-                        Adresa
-                      </label>
-                      <input
-                        type="text"
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="npr. Karađorđeva 10"
-                      />
+                      <label className="block text-sm font-medium mb-1">Adresa</label>
+                      <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="npr. Karađorđeva 10" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">
-                        Telefon
-                      </label>
-                      <input
-                        type="text"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="npr. 0631234567"
-                      />
+                      <label className="block text-sm font-medium mb-1">Telefon</label>
+                      <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="npr. 0631234567" />
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium mb-1">
-                        Radno vreme (npr. 08:00 - 23:00)
-                      </label>
-                      <input
-                        type="text"
-                        value={workHours}
-                        onChange={(e) => setWorkHours(e.target.value)}
-                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="08:00 - 23:00"
-                      />
+                      <label className="block text-sm font-medium mb-1">Radno vreme (npr. 08:00 - 23:00)</label>
+                      <input type="text" value={workHours} onChange={(e) => setWorkHours(e.target.value)} className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="08:00 - 23:00" />
                     </div>
                   </div>
-                  {restaurantError && (
-                    <p className="text-red-500 text-sm">{restaurantError}</p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleAddRestaurant}
-                    disabled={restaurantLoading || !restaurantName || !city || !address}
-                    className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 transition-colors disabled:bg-blue-300"
-                  >
+                  {restaurantError && <p className="text-red-500 text-sm">{restaurantError}</p>}
+                  <button type="button" onClick={handleAddRestaurant} disabled={restaurantLoading || !restaurantName || !city || !address} className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 transition-colors disabled:bg-blue-300">
                     {restaurantLoading ? 'Dodavanje...' : 'Dodaj restoran'}
                   </button>
                 </div>
-                {/* Lista postojećih restorana */}
                 <h3 className="text-lg font-bold mb-2">Postojeći restorani</h3>
                 {restaurantsList.length === 0 ? (
                   <p className="text-gray-600">Nema restorana</p>
                 ) : (
                   <ul className="space-y-2">
                     {restaurantsList.map((r) => (
-                      <li
-                        key={r.id}
-                        className="flex items-center justify-between p-3 border rounded"
-                      >
+                      <li key={r.id} className="flex items-center justify-between p-3 border rounded">
                         <div>
                           <p className="font-medium">{r.name}</p>
-                          <p className="text-sm text-gray-600">
-                            {r.city} • {r.address}
-                          </p>
+                          <p className="text-sm text-gray-600">{r.city} • {r.address}</p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteRestaurant(r.id)}
-                          className="text-red-500 hover:underline"
-                        >
-                          Obriši
-                        </button>
+                        <button type="button" onClick={() => handleDeleteRestaurant(r.id)} className="text-red-500 hover:underline">Obriši</button>
                       </li>
                     ))}
                   </ul>
                 )}
               </div>
             )}
-
-            {activeTab === "menu" && (
-              <div>
-                <h2 className="text-xl font-bold mb-4">Upravljanje menijem</h2>
-                <p className="text-gray-600">
-                  Ovde će biti forma za upravljanje menijem
-                </p>
-              </div>
-            )}
-
-            {activeTab === "users" && (
-              <div>
-                <h2 className="text-xl font-bold mb-4">Statistika korisnika</h2>
-                <p className="text-gray-600">
-                  Ovde će biti pregled korisničke aktivnosti
-                </p>
-              </div>
-            )}
-
-            {activeTab === "reviews" && (
-              <div>
-                <h2 className="text-xl font-bold mb-4">
-                  Upravljanje recenzijama
-                </h2>
-                <p className="text-gray-600">
-                  Ovde će biti pregled i moderacija recenzija
-                </p>
-              </div>
-            )}
-
-            {activeTab === "points" && (
-              <div>
-                <h2 className="text-xl font-bold mb-4">Konfiguracija poena</h2>
-                <p className="text-gray-600">
-                  Ovde će biti podešavanja sistema poena i nagrada
-                </p>
-              </div>
-            )}
+            {/* Ostali tabovi */}
+            {activeTab === "menu" && <div><h2 className="text-xl font-bold mb-4">Upravljanje menijem</h2><p className="text-gray-600">Ovde će biti forma za upravljanje menijem</p></div>}
+            {activeTab === "users" && <div><h2 className="text-xl font-bold mb-4">Statistika korisnika</h2><p className="text-gray-600">Ovde će biti pregled korisničke aktivnosti</p></div>}
+            {activeTab === "reviews" && <div><h2 className="text-xl font-bold mb-4">Upravljanje recenzijama</h2><p className="text-gray-600">Ovde će biti pregled i moderacija recenzija</p></div>}
+            {activeTab === "points" && <div><h2 className="text-xl font-bold mb-4">Konfiguracija poena</h2><p className="text-gray-600">Ovde će biti podešavanja sistema poena i nagrada</p></div>}
           </div>
         </div>
       </div>
