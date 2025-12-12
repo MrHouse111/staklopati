@@ -1,370 +1,847 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import RadioPlayer from "../components/radio-player";
+import { useUpload } from "../utilities/runtime-helpers";
+
+// Definisemo ApiService lokalno ako fajl ne postoji
+const apiFetch = async (endpoint, body) => {
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return await res.json();
+  } catch (e) {
+    console.error(e);
+    return null;
+  }
+};
 
 function MainComponent() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState({ id: "anonymous" });
+  const [userLoading, setUserLoading] = useState(false);
+  const [activeScreen, setActiveScreen] = useState("cities");
+  const [selectedCity, setSelectedCity] = useState("");
+  const [selectedRestaurant, setSelectedRestaurant] = useState("");
+  const [activeCategory, setActiveCategory] = useState("");
+  const [isRestaurantOpen, setIsRestaurantOpen] = useState(false);
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  const [error, setError] = useState(null);
+  const [upload, { loading }] = useUpload();
+  const [reviews, setReviews] = useState({});
+  const [newReview, setNewReview] = useState({ text: "", image: null });
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [pendingReviews, setPendingReviews] = useState([]);
+  const [reviewStatus, setReviewStatus] = useState({});
+  const [favoriteItems, setFavoriteItems] = useState({});
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [points, setPoints] = useState(0);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [showGallery, setShowGallery] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [showRadio, setShowRadio] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [typingUsers, setTypingUsers] = useState({});
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [restaurants, setRestaurants] = useState({});
+  const [restaurantsLoading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [restaurantStatus, setRestaurantStatus] = useState({});
+  const [userPreferences, setUserPreferences] = useState({
+    badges: {
+      "Prvi Pregled": false,
+      "Redovan Korisnik": false,
+      Gurman: false,
+      Društvenjak: false,
+      Ekspert: false,
+      Foodie: true,
+    },
+    favoriteCategories: ["Roštilj", "Pica", "Salate"],
+    visitedRestaurants: ["Caribic", "Dukat", "Kod Žike"],
+  });
+  const rewards = [
+    { id: 1, description: "10% popusta na sledeću porudžbinu", points: 100 },
+    { id: 2, description: "Besplatno piće uz obrok", points: 150 },
+    { id: 3, description: "Besplatna dostava", points: 200 },
+    { id: 4, description: "Besplatan obrok", points: 500 },
+  ];
+  const [menuData, setMenuData] = useState(null);
+  const [menuLoading, setMenuLoading] = useState(false);
+  const [menuError, setMenuError] = useState(null);
+  
+  // Safe localStorage access
+  const [lastSelectedCity, setLastSelectedCity] = useState("");
+  const [debugInfo, setDebugInfo] = useState({});
 
-  // --- Restaurants management state ---
-  const [restaurantName, setRestaurantName] = useState("");
-  const [city, setCity] = useState("Nova Pazova");
-  const [address, setAddress] = useState("");
-  const [phone, setPhone] = useState("");
-  const [workHours, setWorkHours] = useState("");
-  const [restaurantsList, setRestaurantsList] = useState([]);
-  const [restaurantLoading, setRestaurantLoading] = useState(false);
-  const [restaurantError, setRestaurantError] = useState("");
-
-  // Load restaurants when the restaurants tab is active
   useEffect(() => {
-    if (activeTab === "restaurants") {
-      loadRestaurants();
+    if (typeof window !== 'undefined') {
+        const savedCity = localStorage.getItem("lastSelectedCity");
+        if (savedCity) {
+            setLastSelectedCity(savedCity);
+        }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, []);
 
-  const loadRestaurants = async () => {
+  // Inicijalno učitavanje ako postoji lastSelectedCity
+  useEffect(() => {
+    if (lastSelectedCity) {
+      setSelectedCity(lastSelectedCity);
+      setActiveScreen("restaurants");
+      loadRestaurants(lastSelectedCity);
+    }
+  }, [lastSelectedCity]);
+
+  useEffect(() => {
+    const loadMessages = async () => {
+      try {
+        setChatLoading(true);
+        const response = await fetch("/api/db/user-reviews", {
+          method: "POST",
+          body: JSON.stringify({
+            query:
+              "SELECT * FROM `chat_messages` ORDER BY created_at DESC LIMIT 50",
+          }),
+        });
+        if (response.ok) {
+            const messages = await response.json();
+            if (Array.isArray(messages)) {
+                setMessages(messages.reverse());
+            }
+        }
+      } catch (error) {
+        console.error("Error loading messages:", error);
+      } finally {
+        setChatLoading(false);
+      }
+    };
+    if (showChat) {
+      loadMessages();
+    }
+  }, [showChat]);
+
+  const loadRestaurantMenu = async (restaurantId) => {
     try {
-      const response = await fetch("/api/admin/restaurants", {
+      setMenuLoading(true);
+      setMenuError(null);
+      const response = await fetch("/api/get-restaurant-menu", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "read" }),
+        body: JSON.stringify({ restaurantId }),
+      });
+      if (!response.ok) {
+        throw new Error("Problem sa učitavanjem menija");
+      }
+      const data = await response.json();
+      setMenuData(data);
+    } catch (err) {
+      console.error("Greška pri učitavanju menija:", err);
+      setMenuError("Nije moguće učitati meni. Molimo pokušajte ponovo.");
+    } finally {
+      setMenuLoading(false);
+    }
+  };
+
+  const checkRestaurantStatus = async (restaurantId) => {
+    try {
+      const response = await fetch("/api/check-restaurant-status", {
+        method: "POST",
+        body: JSON.stringify({ restaurantId }),
       });
       const data = await response.json();
-      if (data.restaurants) {
-        setRestaurantsList(data.restaurants);
+      return data.isOpen;
+    } catch (error) {
+      console.error("Error checking restaurant status:", error);
+      return null;
+    }
+  };
+
+  const loadRestaurants = async (city) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetch("/api/restaurants/by-city", {
+        method: "POST",
+        body: JSON.stringify({ city }),
+      });
+      if (!response.ok) {
+        throw new Error(`Error loading restaurants: ${response.status}`);
       }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleAddRestaurant = async () => {
-    setRestaurantLoading(true);
-    setRestaurantError("");
-    try {
-      const res = await fetch("/api/admin/restaurants", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "create",
-          restaurant: {
-            name: restaurantName,
-            city,
-            address,
-            phone: phone || null,
-            delivery_info: workHours || null,
-          },
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setRestaurantName("");
-        setCity("Nova Pazova");
-        setAddress("");
-        setPhone("");
-        setWorkHours("");
-        await loadRestaurants();
-      } else {
-        setRestaurantError(data.error || "Greška pri dodavanju restorana");
-      }
-    } catch (err) {
-      setRestaurantError("Došlo je do greške");
-    }
-    setRestaurantLoading(false);
-  };
-
-  const handleDeleteRestaurant = async (id) => {
-    try {
-      await fetch("/api/admin/restaurants", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "delete", restaurant: { id } }),
-      });
-      await loadRestaurants();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const verifyPassword = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch("/api/verify-admin-password", {
-        method: "POST",
-        body: JSON.stringify({ password }),
-      });
       const data = await response.json();
 
-      if (data.success) {
-        setIsAuthenticated(true);
-        setError("");
+      const statuses = {};
+      if (data.restaurants && Array.isArray(data.restaurants)) {
+          await Promise.all(
+            data.restaurants.map(async (restaurant) => {
+              statuses[restaurant.id] = await checkRestaurantStatus(restaurant.id);
+            })
+          );
+          setRestaurantStatus(statuses);
+    
+          setRestaurants((prev) => ({
+            ...prev,
+            [city]: data.restaurants,
+          }));
       } else {
-        setError(data.error || "Greška pri verifikaciji");
+          setRestaurants((prev) => ({
+            ...prev,
+            [city]: [],
+          }));
       }
     } catch (err) {
-      setError("Došlo je do greške");
+      console.error("Error loading restaurants:", err);
+      setError("Nije moguće učitati restorane. Molimo pokušajte ponovo.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  if (!isAuthenticated) {
+  const renderChat = () => {
+    if (!showChat) return null;
+
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-          <h1 className="text-2xl font-bold text-center mb-6 font-roboto">
-            Admin Panel
-          </h1>
-          <div className="space-y-4">
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Unesite admin lozinku"
-              className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              onKeyPress={(e) => e.key === "Enter" && verifyPassword()}
-            />
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div className="bg-[#2a2a2a] rounded-lg max-w-md w-full max-h-[80vh] flex flex-col">
+          <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+            <h2 className="text-xl font-semibold flex items-center">
+              <i className="fas fa-comments text-[#00bfa5] mr-2"></i>
+              Chat
+            </h2>
             <button
-              onClick={verifyPassword}
-              disabled={loading}
-              className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition-colors disabled:bg-blue-300"
+              onClick={() => setShowChat(false)}
+              className="text-[#00bfa5] hover:text-white transition-colors flex items-center font-bold"
             >
-              {loading ? "Provera..." : "Prijavi se"}
+              <i className="fas fa-arrow-left text-lg mr-2"></i>
+              Nazad
             </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.map((msg, index) => (
+              <div
+                key={index}
+                className={`flex ${
+                  msg.user_id === user.id ? "justify-end" : "justify-start"
+                }`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-lg p-3 ${
+                    msg.user_id === user.id
+                      ? "bg-[#00bfa5] text-white"
+                      : "bg-[#3a3a3a] text-gray-200"
+                  }`}
+                >
+                  <div className="text-sm opacity-75 mb-1">
+                    {msg.user_id === user.id ? "Vi" : "Korisnik"}
+                  </div>
+                  <p>{msg.message}</p>
+                  <div className="text-xs opacity-50 text-right mt-1">
+                    {new Date(msg.created_at).toLocaleTimeString()}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {chatLoading && (
+              <div className="flex justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00bfa5]"></div>
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 border-t border-gray-700">
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newMessage.trim()) return;
+
+                const messageData = {
+                  message: newMessage,
+                  user_id: user.id,
+                  created_at: new Date().toISOString(),
+                };
+
+                try {
+                  setChatLoading(true);
+                  await fetch("/api/db/user-reviews", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      query:
+                        "INSERT INTO `chat_messages` (message, user_id, created_at) VALUES (?, ?, ?)",
+                      values: [
+                        messageData.message,
+                        messageData.user_id,
+                        messageData.created_at,
+                      ],
+                    }),
+                  });
+
+                  setMessages((prev) => [...prev, messageData]);
+                  setNewMessage("");
+
+                  const response = await fetch("/api/db/user-reviews", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      query:
+                        "SELECT * FROM `chat_messages` ORDER BY created_at DESC LIMIT 50",
+                    }),
+                  });
+                  const newMessages = await response.json();
+                  setMessages(newMessages.reverse());
+                } catch (error) {
+                  console.error("Error sending message:", error);
+                } finally {
+                  setChatLoading(false);
+                }
+              }}
+              className="flex gap-2"
+            >
+              <input
+                type="text"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Napišite poruku..."
+                className="flex-1 bg-[#3a3a3a] rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#00bfa5]"
+              />
+              <button
+                type="submit"
+                disabled={chatLoading || !newMessage.trim()}
+                className="bg-[#00bfa5] text-white px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#00a693] transition-colors"
+              >
+                <i className="fas fa-paper-plane"></i>
+              </button>
+            </form>
           </div>
         </div>
       </div>
     );
-  }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="flex">
-        <div className="w-64 bg-white h-screen shadow-md">
-          <div className="p-4">
-            <h1 className="text-xl font-bold font-roboto">Admin Panel</h1>
+    <div className="min-h-screen bg-[#121212] text-white" role="main">
+      {activeScreen === "cities" && (
+        <div className="flex flex-col items-center justify-center min-h-screen pt-16">
+          <div className="fixed top-0 right-0 p-4 flex gap-4 z-50">
+            <button
+              onClick={() => setShowRadio(true)}
+              className="text-gray-400 hover:text-[#00bfa5] transition-colors"
+              aria-label="Otvori radio"
+            >
+              <i className="fas fa-radio text-2xl"></i>
+            </button>
+            <button
+              onClick={() => {
+                setShowChat(true);
+                setActiveScreen("chat");
+              }}
+              className="text-gray-400 hover:text-[#00bfa5] transition-colors"
+            >
+              <i className="fas fa-comments text-2xl"></i>
+            </button>
+            <button
+              onClick={() => setShowFavorites(true)}
+              className="text-gray-400 hover:text-[#00bfa5] transition-colors"
+            >
+              <i className="fas fa-heart text-2xl"></i>
+            </button>
+            <button
+              onClick={() => setActiveScreen("loyalty")}
+              className="text-gray-400 hover:text-[#00bfa5] transition-colors"
+            >
+              <i className="fas fa-gift text-2xl"></i>
+            </button>
+            <button
+              onClick={() => setActiveScreen("profile")}
+              className="text-gray-400 hover:text-[#00bfa5] transition-colors"
+            >
+              <i className="fas fa-user text-2xl"></i>
+            </button>
           </div>
-          <nav className="mt-4">
-            {[
-              { id: "dashboard", name: "Dashboard", icon: "fa-chart-line" },
-              { id: "cities", name: "Gradovi", icon: "fa-city" },
-              { id: "restaurants", name: "Restorani", icon: "fa-utensils" },
-              { id: "menu", name: "Meni", icon: "fa-book-open" },
-              { id: "users", name: "Korisnici", icon: "fa-users" },
-              { id: "reviews", name: "Recenzije", icon: "fa-star" },
-              { id: "points", name: "Poeni", icon: "fa-coins" },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full text-left p-3 flex items-center space-x-3 hover:bg-gray-100 transition-colors ${
-                  activeTab === tab.id ? "bg-gray-100" : ""
-                }`}
-              >
-                <i className={`fas ${tab.icon} w-6`}></i>
-                <span>{tab.name}</span>
-              </button>
+
+          <h1 className="text-4xl md:text-6xl font-serif mb-8">Šta Klopati</h1>
+          <img
+            src="https://ucarecdn.com/84e97dda-5149-45c9-910a-8ee1fcb5bf35/-/format/auto/"
+            alt="Šta Klopati Logo"
+            className="w-[120px] h-[120px] rounded-full mb-12"
+          />
+
+          <div className="flex flex-col gap-6 w-full max-w-xs">
+            {["Nova Pazova", "Stara Pazova", "Banovci"].map((city) => (
+            <button
+              key={city}
+              onClick={() => {
+                setSelectedCity(city);
+                setActiveScreen("restaurants");
+                loadRestaurants(city);
+                localStorage.setItem("lastSelectedCity", city);
+                setLastSelectedCity(city);
+              }}
+              className="group relative bg-gradient-to-r from-[#00bfa5] to-[#00a693] py-4 px-8 rounded-lg text-xl shadow-lg transform transition-all duration-300 hover:scale-105 hover:shadow-xl active:scale-95"
+            >
+              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 rounded-lg transition-opacity"></div>
+              <div className="flex items-center justify-center gap-3">
+                <i className="fas fa-map-marker-alt"></i>
+                <span>{city}</span>
+              </div>
+            </button>
             ))}
-          </nav>
+          </div>
         </div>
+      )}
 
-        <div className="flex-1 p-8">
-          <div className="bg-white rounded-lg shadow-md p-6">
-            {activeTab === "dashboard" && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-blue-50 p-6 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">Ukupno korisnika</h3>
-                    <i className="fas fa-users text-blue-500 text-xl"></i>
-                  </div>
-                  <p className="text-3xl font-bold mt-2">0</p>
-                </div>
-                <div className="bg-green-50 p-6 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">Ukupno restorana</h3>
-                    <i className="fas fa-utensils text-green-500 text-xl"></i>
-                  </div>
-                  <p className="text-3xl font-bold mt-2">0</p>
-                </div>
-                <div className="bg-purple-50 p-6 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">Ukupno gradova</h3>
-                    <i className="fas fa-city text-purple-500 text-xl"></i>
-                  </div>
-                  <p className="text-3xl font-bold mt-2">0</p>
-                </div>
-              </div>
-            )}
+      {/* Ostali ekrani (restaurants, menu, loyalty, profile) ostaju isti */}
+      {activeScreen === "restaurants" && (
+        <div className="p-4">
+          <div className="flex justify-between items-center mb-6">
+            <button
+              onClick={() => {
+                setActiveScreen("cities");
+                localStorage.removeItem("lastSelectedCity");
+                setLastSelectedCity("");
+              }}
+              className="text-[#00bfa5] flex items-center"
+            >
+              <i className="fas fa-city mr-2"></i>
+              Promeni grad
+            </button>
+            <h2 className="text-2xl">{selectedCity}</h2>
+          </div>
 
-            {activeTab === "cities" && (
-              <div>
-                <h2 className="text-xl font-bold mb-4">
-                  Upravljanje gradovima
-                </h2>
-                <p className="text-gray-600">
-                  Ovde će biti forma za upravljanje gradovima
-                </p>
-              </div>
-            )}
-
-            {activeTab === "restaurants" && (
-              <div>
-                <h2 className="text-xl font-bold mb-4">
-                  Upravljanje restoranima
-                </h2>
-                {/* Forma za dodavanje novog restorana */}
-                <div className="mb-6 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">
-                        Ime restorana
-                      </label>
-                      <input
-                        type="text"
-                        value={restaurantName}
-                        onChange={(e) => setRestaurantName(e.target.value)}
-                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="npr. Caffe Club 22"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">
-                        Grad
-                      </label>
-                      <select
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="Nova Pazova">Nova Pazova</option>
-                        <option value="Stara Pazova">Stara Pazova</option>
-                        <option value="Banovci">Banovci</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">
-                        Adresa
-                      </label>
-                      <input
-                        type="text"
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="npr. Karađorđeva 10"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">
-                        Telefon
-                      </label>
-                      <input
-                        type="text"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="npr. 0631234567"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium mb-1">
-                        Radno vreme (npr. 08:00 - 23:00)
-                      </label>
-                      <input
-                        type="text"
-                        value={workHours}
-                        onChange={(e) => setWorkHours(e.target.value)}
-                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="08:00 - 23:00"
-                      />
-                    </div>
-                  </div>
-                  {restaurantError && (
-                    <p className="text-red-500 text-sm">{restaurantError}</p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleAddRestaurant}
-                    disabled={restaurantLoading || !restaurantName || !city || !address}
-                    className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 transition-colors disabled:bg-blue-300"
+          {restaurantsLoading ? (
+            <div className="flex justify-center items-center p-8">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00bfa5]"></div>
+            </div>
+          ) : error ? (
+            <div className="text-red-500 p-4 text-center bg-[#2a2a2a] rounded-lg">
+              <i className="fas fa-exclamation-circle text-2xl mb-2"></i>
+              <p>{error}</p>
+              <button
+                onClick={() => loadRestaurants(selectedCity)}
+                className="mt-4 px-4 py-2 bg-[#00bfa5] rounded-lg text-white hover:bg-[#00a693]"
+              >
+                Pokušaj ponovo
+              </button>
+            </div>
+          ) : restaurants[selectedCity]?.length > 0 ? (
+            <div className="grid gap-4">
+              {restaurants[selectedCity]
+                .filter((restaurant) =>
+                  restaurant.name
+                    .toLowerCase()
+                    .includes(searchQuery.toLowerCase())
+                )
+                .map((restaurant, index) => (
+                  <div
+                    key={index}
+                    className="bg-[#2a2a2a] p-4 rounded-lg cursor-pointer hover:bg-[#3a3a3a] transition-all duration-200"
+                    onClick={() => {
+                      setSelectedRestaurant(restaurant);
+                      setActiveScreen("menu");
+                      loadRestaurantMenu(restaurant.id);
+                    }}
                   >
-                    {restaurantLoading ? 'Dodavanje...' : 'Dodaj restoran'}
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <h3 className="text-xl mb-2">{restaurant.name}</h3>
+                        <div className="space-y-1 text-sm">
+                          <p className="text-gray-400">{restaurant.hours}</p>
+                          <p className="text-gray-400">{restaurant.phone}</p>
+                        </div>
+                      </div>
+
+                      <div className="ml-4">
+                        {restaurantStatus[restaurant.id] !== null && (
+                          <div
+                            className={`px-3 py-1 rounded-full text-sm font-medium ${
+                              restaurantStatus[restaurant.id]
+                                ? "bg-green-500/10 text-green-500"
+                                : "bg-red-500/10 text-red-500"
+                            }`}
+                          >
+                            {restaurantStatus[restaurant.id]
+                              ? "Otvoreno"
+                              : "Zatvoreno"}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <div className="text-center text-gray-400 p-8 bg-[#2a2a2a] rounded-lg">
+              <i className="fas fa-store-alt-slash text-4xl mb-4"></i>
+              <p>Trenutno nema dostupnih restorana u {selectedCity}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeScreen === "menu" && selectedRestaurant && (
+        <div className="pb-20 relative min-h-screen">
+          <div className="sticky top-0 bg-[#121212] z-10 p-4 border-b border-gray-800">
+            <div className="flex items-center justify-between mb-4">
+              <button
+                onClick={() => setActiveScreen("restaurants")}
+                className="text-[#00bfa5] flex items-center"
+              >
+                <i className="fas fa-arrow-left mr-2"></i> Nazad
+              </button>
+              <h2 className="text-xl font-semibold">
+                {selectedRestaurant.name}
+              </h2>
+              <div className="w-8"></div>
+            </div>
+
+            <div className="flex items-center text-sm text-gray-400">
+              <div className="flex items-center">
+                <i className="far fa-clock mr-2"></i>
+                <span>{selectedRestaurant.hours}</span>
+              </div>
+            </div>
+          </div>
+
+          {menuLoading ? (
+            <div className="flex justify-center items-center p-8">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00bfa5]"></div>
+            </div>
+          ) : menuError ? (
+            <div className="text-red-500 p-4 text-center bg-[#2a2a2a] rounded-lg m-4">
+              <i className="fas fa-exclamation-circle text-2xl mb-2"></i>
+              <p>{menuError}</p>
+              <button
+                onClick={() => loadRestaurantMenu(selectedRestaurant.id)}
+                className="mt-4 px-4 py-2 bg-[#00bfa5] rounded-lg text-white hover:bg-[#00a693]"
+              >
+                Pokušaj ponovo
+              </button>
+            </div>
+          ) : menuData ? (
+            <>
+              <div className="sticky top-[72px] bg-[#121212] z-10 border-b border-gray-800">
+                <div className="overflow-x-auto hide-scrollbar">
+                  <div className="flex p-2 space-x-2 min-w-max">
+                    {Object.keys(menuData.menu).map((category) => (
+                      <button
+                        key={category}
+                        onClick={() => setActiveCategory(category)}
+                        className={`px-4 py-2 rounded-full whitespace-nowrap transition-all duration-200 ${
+                          activeCategory === category
+                            ? "bg-[#00bfa5] text-white"
+                            : "bg-[#2a2a2a] text-gray-300 hover:bg-[#3a3a3a]"
+                        }`}
+                      >
+                        {category === "Roštilj" && (
+                          <i className="fas fa-fire mr-2"></i>
+                        )}
+                        {category === "Prilozi" && (
+                          <i className="fas fa-utensils mr-2"></i>
+                        )}
+                        {category === "Salate" && (
+                          <i className="fas fa-leaf mr-2"></i>
+                        )}
+                        {category === "Pića" && (
+                          <i className="fas fa-glass-martini mr-2"></i>
+                        )}
+                        {category}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4">
+                <div className="grid gap-3">
+                  {menuData.menu[
+                    activeCategory || Object.keys(menuData.menu)[0]
+                  ]?.map((item, index) => (
+                    <div
+                      key={index}
+                      className="bg-[#2a2a2a] rounded-lg p-4 hover:bg-[#3a3a3a] transition-colors duration-200"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h4 className="text-lg font-medium mb-1">
+                            {item.name}
+                          </h4>
+                          <div className="space-y-1">
+                            {item.description && (
+                              <p className="text-sm text-gray-400">
+                                {item.description}
+                              </p>
+                            )}
+                            {item.portion && (
+                              <p className="text-sm text-gray-400 flex items-center">
+                                <i className="fas fa-weight mr-2"></i>
+                                {item.portion}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end ml-4">
+                          <span className="text-[#00bfa5] font-semibold mb-2">
+                            {item.price} RSD
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const key = `${selectedRestaurant.name}-${item.name}`;
+                              setFavoriteItems((prev) => ({
+                                ...prev,
+                                [key]: !prev[key],
+                              }));
+                            }}
+                            className="text-2xl transition-colors duration-200 hover:scale-110"
+                          >
+                            <i
+                              className={`fas fa-heart ${
+                                favoriteItems[
+                                  `${selectedRestaurant.name}-${item.name}`
+                                ]
+                                  ? "text-red-500"
+                                  : "text-gray-400"
+                              }`}
+                            ></i>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-center text-gray-400 p-8">
+              <p>Meni nije dostupan</p>
+            </div>
+          )}
+
+          <a
+            href={`tel:${selectedRestaurant.phone}`}
+            className="fixed bottom-6 right-6 bg-[#00bfa5] w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:bg-[#00a693] transition-colors z-40"
+          >
+            <i className="fas fa-phone text-white text-2xl"></i>
+          </a>
+        </div>
+      )}
+
+      {activeScreen === "loyalty" && (
+        <div className="min-h-screen bg-[#121212] p-4">
+          <div className="sticky top-0 bg-[#121212] z-10 pb-4">
+            <button
+              onClick={() => setActiveScreen("cities")}
+              className="text-[#00bfa5] flex items-center mb-4"
+            >
+              <i className="fas fa-arrow-left mr-2"></i> Nazad
+            </button>
+            <h2 className="text-2xl font-semibold mb-2">Loyalty Program</h2>
+            <div className="bg-[#2a2a2a] p-4 rounded-lg mb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400">Vaši poeni</p>
+                  <p className="text-3xl font-bold text-[#00bfa5]">{points}</p>
+                </div>
+                <i className="fas fa-star text-[#00bfa5] text-4xl"></i>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4">
+            {rewards.map((reward) => (
+              <div key={reward.id} className="bg-[#2a2a2a] p-4 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="text-lg font-medium mb-1">
+                      {reward.description}
+                    </h3>
+                    <p className="text-sm text-gray-400">
+                      Potrebno poena: {reward.points}
+                    </p>
+                  </div>
+                  <button
+                    disabled={points < reward.points || reward.claimed}
+                    onClick={() => {
+                      alert("Nagrada je uspešno aktivirana!");
+                    }}
+                    className={`px-4 py-2 rounded-lg ${
+                      points >= reward.points && !reward.claimed
+                        ? "bg-[#00bfa5] text-white"
+                        : "bg-gray-600 text-gray-400"
+                    }`}
+                  >
+                    {reward.claimed ? "Iskorišćeno" : "Aktiviraj"}
                   </button>
                 </div>
-                {/* Lista postojećih restorana */}
-                <h3 className="text-lg font-bold mb-2">Postojeći restorani</h3>
-                {restaurantsList.length === 0 ? (
-                  <p className="text-gray-600">Nema restorana</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {restaurantsList.map((r) => (
-                      <li
-                        key={r.id}
-                        className="flex items-center justify-between p-3 border rounded"
-                      >
-                        <div>
-                          <p className="font-medium">{r.name}</p>
-                          <p className="text-sm text-gray-600">
-                            {r.city} • {r.address}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteRestaurant(r.id)}
-                          className="text-red-500 hover:underline"
-                        >
-                          Obriši
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
               </div>
-            )}
-
-            {activeTab === "menu" && (
-              <div>
-                <h2 className="text-xl font-bold mb-4">Upravljanje menijem</h2>
-                <p className="text-gray-600">
-                  Ovde će biti forma za upravljanje menijem
-                </p>
-              </div>
-            )}
-
-            {activeTab === "users" && (
-              <div>
-                <h2 className="text-xl font-bold mb-4">Statistika korisnika</h2>
-                <p className="text-gray-600">
-                  Ovde će biti pregled korisničke aktivnosti
-                </p>
-              </div>
-            )}
-
-            {activeTab === "reviews" && (
-              <div>
-                <h2 className="text-xl font-bold mb-4">
-                  Upravljanje recenzijama
-                </h2>
-                <p className="text-gray-600">
-                  Ovde će biti pregled i moderacija recenzija
-                </p>
-              </div>
-            )}
-
-            {activeTab === "points" && (
-              <div>
-                <h2 className="text-xl font-bold mb-4">Konfiguracija poena</h2>
-                <p className="text-gray-600">
-                  Ovde će biti podešavanja sistema poena i nagrada
-                </p>
-              </div>
-            )}
+            ))}
           </div>
         </div>
-      </div>
+      )}
+
+      {activeScreen === "profile" && (
+        <div className="min-h-screen bg-[#121212] p-4">
+          <div className="sticky top-0 bg-[#121212] z-10 pb-4">
+            <button
+              onClick={() => setActiveScreen("cities")}
+              className="text-[#00bfa5] flex items-center mb-4"
+            >
+              <i className="fas fa-arrow-left mr-2"></i> Nazad
+            </button>
+            <h2 className="text-2xl font-semibold mb-4">Vaš Profil</h2>
+          </div>
+
+          <div className="space-y-4">
+            <div className="bg-[#2a2a2a] p-4 rounded-lg">
+              <div className="flex items-center space-x-4">
+                <div className="w-20 h-20 bg-[#3a3a3a] rounded-full flex items-center justify-center">
+                  <i className="fas fa-user text-3xl text-[#00bfa5]"></i>
+                </div>
+                <div>
+                  <h3 className="text-xl font-medium">Korisnik</h3>
+                  <p className="text-gray-400">ID: {user.id}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#2a2a2a] p-4 rounded-lg">
+              <h3 className="text-lg font-medium mb-3">Vaša Dostignuća</h3>
+              <div className="grid grid-cols-3 gap-3">
+                {Object.entries(userPreferences.badges).map(
+                  ([badge, earned], index) => (
+                    <div
+                      key={index}
+                      className={`p-3 rounded-lg text-center ${
+                        earned ? "bg-[#00bfa5] bg-opacity-20" : "bg-[#3a3a3a]"
+                      }`}
+                    >
+                      <i
+                        className={`fas fa-${
+                          earned
+                            ? "check-circle text-[#00bfa5]"
+                            : "circle text-gray-400"
+                        } text-2xl mb-2`}
+                      ></i>
+                      <p className="text-sm">{badge}</p>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+
+            <div className="bg-[#2a2a2a] p-4 rounded-lg">
+              <h3 className="text-lg font-medium mb-3">Omiljene Kategorije</h3>
+              <div className="flex flex-wrap gap-2">
+                {userPreferences.favoriteCategories.map((category, index) => (
+                  <span
+                    key={index}
+                    className="bg-[#3a3a3a] px-3 py-1 rounded-full text-sm"
+                  >
+                    {category}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-[#2a2a2a] p-4 rounded-lg">
+              <h3 className="text-lg font-medium mb-3">Posećeni Restorani</h3>
+              <div className="space-y-2">
+                {userPreferences.visitedRestaurants.map((restaurant, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between"
+                  >
+                    <span>{restaurant}</span>
+                    <i className="fas fa-check text-[#00bfa5]"></i>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeScreen === "chat" && renderChat()}
+
+      {showFavorites && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#2a2a2a] rounded-lg max-w-md w-full max-h-[80vh] overflow-hidden">
+            <div className="p-4 border-b border-gray-700 flex justify-between items-center sticky top-0 bg-[#2a2a2a]">
+              <h2 className="text-xl font-semibold flex items-center">
+                <i className="fas fa-heart text-red-500 mr-2"></i>
+                Omiljena jela
+              </h2>
+              <button
+                onClick={() => setShowFavorites(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            <div
+              className="p-4 overflow-y-auto"
+              style={{ maxHeight: "calc(80vh - 70px)" }}
+            >
+              {Object.entries(favoriteItems).filter(
+                ([, isFavorite]) => isFavorite
+              ).length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <i className="far fa-heart text-4xl mb-3"></i>
+                  <p>Nemate označenih omiljenih jela</p>
+                  <p className="text-sm mt-2">
+                    Označite srce pored jela da ga dodate u omiljene
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {Object.entries(favoriteItems).map(([key, isFavorite]) => {
+                    if (!isFavorite) return null;
+                    const [restaurant, item] = key.split("-");
+                    return (
+                      <div
+                        key={key}
+                        className="bg-[#3a3a3a] rounded-lg p-3 flex justify-between items-center group hover:bg-[#4a4a4a] transition-colors"
+                      >
+                        <div>
+                          <p className="font-medium">{item}</p>
+                          <p className="text-sm text-gray-400">{restaurant}</p>
+                        </div>
+                        <button
+                          onClick={() =>
+                            setFavoriteItems((prev) => ({
+                              ...prev,
+                              [key]: false,
+                            }))
+                          }
+                          className="text-red-500 opacity-75 group-hover:opacity-100 transition-opacity"
+                        >
+                          <i className="fas fa-heart"></i>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRadio && (
+        <RadioPlayer isOpen={showRadio} onClose={() => setShowRadio(false)} />
+      )}
+
+      <style jsx global>{`
+        .hide-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
     </div>
   );
 }
