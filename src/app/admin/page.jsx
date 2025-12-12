@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 function MainComponent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -7,6 +7,88 @@ function MainComponent() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("dashboard");
   const [loading, setLoading] = useState(false);
+
+  // --- Restaurants management state ---
+  const [restaurantName, setRestaurantName] = useState("");
+  const [city, setCity] = useState("Nova Pazova");
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [workHours, setWorkHours] = useState("");
+  const [restaurantsList, setRestaurantsList] = useState([]);
+  const [restaurantLoading, setRestaurantLoading] = useState(false);
+  const [restaurantError, setRestaurantError] = useState("");
+
+  // Load restaurants when the restaurants tab is active
+  useEffect(() => {
+    if (activeTab === "restaurants") {
+      loadRestaurants();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  const loadRestaurants = async () => {
+    try {
+      const response = await fetch("/api/admin/restaurants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "read" }),
+      });
+      const data = await response.json();
+      if (data.restaurants) {
+        setRestaurantsList(data.restaurants);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAddRestaurant = async () => {
+    setRestaurantLoading(true);
+    setRestaurantError("");
+    try {
+      const res = await fetch("/api/admin/restaurants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          restaurant: {
+            name: restaurantName,
+            city,
+            address,
+            phone: phone || null,
+            delivery_info: workHours || null,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRestaurantName("");
+        setCity("Nova Pazova");
+        setAddress("");
+        setPhone("");
+        setWorkHours("");
+        await loadRestaurants();
+      } else {
+        setRestaurantError(data.error || "Greška pri dodavanju restorana");
+      }
+    } catch (err) {
+      setRestaurantError("Došlo je do greške");
+    }
+    setRestaurantLoading(false);
+  };
+
+  const handleDeleteRestaurant = async (id) => {
+    try {
+      await fetch("/api/admin/restaurants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", restaurant: { id } }),
+      });
+      await loadRestaurants();
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const verifyPassword = async () => {
     setLoading(true);
@@ -134,9 +216,112 @@ function MainComponent() {
                 <h2 className="text-xl font-bold mb-4">
                   Upravljanje restoranima
                 </h2>
-                <p className="text-gray-600">
-                  Ovde će biti forma za upravljanje restoranima
-                </p>
+                {/* Forma za dodavanje novog restorana */}
+                <div className="mb-6 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        Ime restorana
+                      </label>
+                      <input
+                        type="text"
+                        value={restaurantName}
+                        onChange={(e) => setRestaurantName(e.target.value)}
+                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="npr. Caffe Club 22"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        Grad
+                      </label>
+                      <select
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="Nova Pazova">Nova Pazova</option>
+                        <option value="Stara Pazova">Stara Pazova</option>
+                        <option value="Banovci">Banovci</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        Adresa
+                      </label>
+                      <input
+                        type="text"
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="npr. Karađorđeva 10"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        Telefon
+                      </label>
+                      <input
+                        type="text"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="npr. 0631234567"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium mb-1">
+                        Radno vreme (npr. 08:00 - 23:00)
+                      </label>
+                      <input
+                        type="text"
+                        value={workHours}
+                        onChange={(e) => setWorkHours(e.target.value)}
+                        className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="08:00 - 23:00"
+                      />
+                    </div>
+                  </div>
+                  {restaurantError && (
+                    <p className="text-red-500 text-sm">{restaurantError}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleAddRestaurant}
+                    disabled={restaurantLoading || !restaurantName || !city || !address}
+                    className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 transition-colors disabled:bg-blue-300"
+                  >
+                    {restaurantLoading ? 'Dodavanje...' : 'Dodaj restoran'}
+                  </button>
+                </div>
+                {/* Lista postojećih restorana */}
+                <h3 className="text-lg font-bold mb-2">Postojeći restorani</h3>
+                {restaurantsList.length === 0 ? (
+                  <p className="text-gray-600">Nema restorana</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {restaurantsList.map((r) => (
+                      <li
+                        key={r.id}
+                        className="flex items-center justify-between p-3 border rounded"
+                      >
+                        <div>
+                          <p className="font-medium">{r.name}</p>
+                          <p className="text-sm text-gray-600">
+                            {r.city} • {r.address}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRestaurant(r.id)}
+                          className="text-red-500 hover:underline"
+                        >
+                          Obriši
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 
