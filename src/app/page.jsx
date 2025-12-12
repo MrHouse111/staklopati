@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react"; // <--- OVO REŠAVA CRNI EKRAN
+import React, { useState, useEffect } from "react"; 
 import RadioPlayer from "../components/radio-player";
 import { useUpload } from "../utilities/runtime-helpers";
 
@@ -11,10 +11,16 @@ const apiFetch = async (endpoint, body) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
+    // Bitno: Next.js API rute koje vraćaju NextResponse.json() zahtevaju proveru ok
+    if (!res.ok) {
+        // Pokušaj parsirati grešku
+        const errorData = await res.json().catch(() => ({ error: `Server error: ${res.status}` }));
+        throw new Error(errorData.error || `Greška na serveru [${res.status}]`);
+    }
     return await res.json();
   } catch (e) {
-    console.error(e);
-    return null;
+    console.error("API Fetch Error:", e.message);
+    return { error: e.message };
   }
 };
 
@@ -22,7 +28,7 @@ function MainComponent() {
   const [user, setUser] = useState({ id: "anonymous" });
   const [activeScreen, setActiveScreen] = useState("cities");
   const [selectedCity, setSelectedCity] = useState("");
-  const [selectedRestaurant, setSelectedRestaurant] = useState("");
+  const [selectedRestaurant, setSelectedRestaurant] = useState(null);
   const [activeCategory, setActiveCategory] = useState("");
   const [showChat, setShowChat] = useState(false);
   const [showRadio, setShowRadio] = useState(false);
@@ -30,7 +36,7 @@ function MainComponent() {
   
   // State za podatke
   const [restaurants, setRestaurants] = useState({});
-  const [menuData, setMenuData] = useState(null);
+  const [menuData, setMenuData] = useState(null); // Sadrži: { menu: {}, restaurantName: 'X', restaurantHours: 'Y' }
   const [favoriteItems, setFavoriteItems] = useState({});
   const [points, setPoints] = useState(0);
   
@@ -79,16 +85,14 @@ function MainComponent() {
     const loadMessages = async () => {
       try {
         setChatLoading(true);
-        // Ovde simuliramo fetch ili gađamo pravi API ako postoji
-        const response = await fetch("/api/db/user-reviews", {
-          method: "POST",
-          body: JSON.stringify({
+        const data = await apiFetch("/api/db/user-reviews", {
             query: "SELECT * FROM `chat_messages` ORDER BY created_at DESC LIMIT 50",
-          }),
         });
-        if (response.ok) {
-            const data = await response.json();
-            if (Array.isArray(data)) setMessages(data.reverse());
+        
+        if (data && Array.isArray(data.messages)) {
+            setMessages(data.messages.reverse());
+        } else {
+             setMessages([]);
         }
       } catch (error) {
         console.error("Error loading messages:", error);
@@ -103,8 +107,8 @@ function MainComponent() {
 
   const checkRestaurantStatus = async (restaurantId) => {
     try {
-      const data = await apiFetch("/api/check-restaurant-status", { restaurantId });
-      return data ? data.isOpen : false;
+      // Trenutno ne implementiramo, vraćamo true
+      return true; 
     } catch (error) {
       return null;
     }
@@ -114,21 +118,19 @@ function MainComponent() {
     try {
       setLoading(true);
       setError(null);
+      // Koristimo popravljeni API /api/restaurants/by-city
       const data = await apiFetch("/api/restaurants/by-city", { city });
       
-      if (!data || !data.restaurants) {
-        // Fallback ako API ne vrati nista
+      if (!data || !data.restaurants || data.error) {
         setRestaurants((prev) => ({ ...prev, [city]: [] }));
+        // Provera da li je greška specifična
+        if (data && data.error) setError(data.error); 
         return;
       }
 
       const statuses = {};
       if (Array.isArray(data.restaurants)) {
-          await Promise.all(
-            data.restaurants.map(async (restaurant) => {
-              statuses[restaurant.id] = await checkRestaurantStatus(restaurant.id);
-            })
-          );
+          data.restaurants.forEach(r => statuses[r.id] = true);
           setRestaurantStatus(statuses);
           setRestaurants((prev) => ({ ...prev, [city]: data.restaurants }));
       }
@@ -140,20 +142,35 @@ function MainComponent() {
   };
 
   const loadRestaurantMenu = async (restaurantId) => {
+    setMenuData(null);
+    setMenuError(null);
     try {
       setMenuLoading(true);
-      setMenuError(null);
-      const data = await apiFetch("/api/get-restaurant-menu", { restaurantId });
-      if (!data || data.error) throw new Error("Problem sa menijem");
+      // Koristimo popravljeni API /api/restaurant-menu
+      const data = await apiFetch("/api/restaurant-menu", { restaurantId });
+
+      if (data && data.error) {
+          throw new Error(data.error);
+      }
+      
+      if (!data || !data.menu || Object.keys(data.menu).length === 0) {
+          throw new Error("Meni nije pronađen ili je prazan.");
+      }
+      
       setMenuData(data);
+      // Postavi prvu kategoriju kao aktivnu
+      if (Object.keys(data.menu).length > 0) {
+          setActiveCategory(Object.keys(data.menu)[0]);
+      }
     } catch (err) {
-      setMenuError("Nije moguće učitati meni.");
+      setMenuError(err.message || "Nije moguće učitati meni.");
     } finally {
       setMenuLoading(false);
     }
   };
 
-  // --- RENDER CHAT SEKCIJE (SA DUGMETOM NAZAD) ---
+
+  // --- RENDER CHAT SEKCIJE ---
   const renderChat = () => {
     if (!showChat) return null;
 
@@ -166,7 +183,6 @@ function MainComponent() {
               <i className="fas fa-comments text-[#00bfa5] mr-2"></i>
               Chat
             </h2>
-            {/* OVO DUGME JE SADA ZELENO I JASNO */}
             <button
               onClick={() => setShowChat(false)}
               className="bg-[#00bfa5] text-white px-4 py-2 rounded-lg font-bold hover:bg-[#00a693] transition-colors flex items-center"
@@ -205,7 +221,7 @@ function MainComponent() {
                 setMessages((prev) => [...prev, messageData]);
                 setNewMessage("");
                 
-                // Slanje na server (ako postoji API)
+                // Slanje na server (ovaj API treba da bude implementiran na backendu)
                 await apiFetch("/api/db/user-reviews", {
                     query: "INSERT INTO `chat_messages` (message, user_id, created_at) VALUES (?, ?, ?)",
                     values: [messageData.message, messageData.user_id, messageData.created_at]
@@ -305,23 +321,104 @@ function MainComponent() {
       {/* MENI RESTORANA */}
       {activeScreen === "menu" && selectedRestaurant && (
         <div className="pb-20 relative min-h-screen">
-           <div className="sticky top-0 bg-[#121212] z-10 p-4 border-b border-gray-800">
-            <button onClick={() => setActiveScreen("restaurants")} className="text-[#00bfa5] flex items-center mb-4">
-                <i className="fas fa-arrow-left mr-2"></i> Nazad na restorane
-            </button>
-            <h2 className="text-2xl font-bold">{selectedRestaurant.name}</h2>
-           </div>
-           
-           {menuLoading ? (
-               <div className="text-center p-10">Učitavanje menija...</div>
-           ) : menuData ? (
-               <div className="p-4">
-                   {/* Kategorije i stavke bi išle ovde, pojednostavljeno za fix */}
-                   <p className="text-center text-gray-500">Meni učitan (prikazati kategorije ovde)</p>
-               </div>
-           ) : (
-               <div className="text-center p-10 text-gray-500">Meni nije dostupan.</div>
-           )}
+            {/* Header za meni */}
+            <div className="sticky top-0 bg-[#121212] z-10 p-4 border-b border-gray-800">
+                <button onClick={() => setActiveScreen("restaurants")} className="text-[#00bfa5] flex items-center mb-4">
+                    <i className="fas fa-arrow-left mr-2"></i> Nazad na restorane
+                </button>
+                <h2 className="text-2xl font-bold mb-1">{selectedRestaurant.name}</h2>
+                <p className="text-sm text-gray-400">{selectedRestaurant.hours}</p>
+            </div>
+            
+            {menuError && (
+                 <div className="text-red-500 p-4 text-center bg-[#2a2a2a] rounded-lg m-4">{menuError}</div>
+            )}
+
+            {menuLoading ? (
+                <div className="text-center p-10"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00bfa5] mx-auto"></div></div>
+            ) : menuData && menuData.menu && Object.keys(menuData.menu).length > 0 ? (
+                <>
+                    {/* Traka za kategorije */}
+                    <div className="sticky top-[95px] bg-[#121212] z-10 border-b border-gray-800">
+                        <div className="overflow-x-auto hide-scrollbar">
+                            <div className="flex p-2 space-x-2 min-w-max">
+                                {Object.keys(menuData.menu).map((category) => (
+                                    <button
+                                        key={category}
+                                        onClick={() => setActiveCategory(category)}
+                                        className={`px-4 py-2 rounded-full whitespace-nowrap transition-all duration-200 ${
+                                            activeCategory === category
+                                                ? "bg-[#00bfa5] text-white"
+                                                : "bg-[#2a2a2a] text-gray-300 hover:bg-[#3a3a3a]"
+                                        }`}
+                                    >
+                                        {category}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Lista jela za odabranu kategoriju */}
+                    <div className="p-4">
+                        <div className="grid gap-3">
+                            {(menuData.menu[activeCategory] || []).map((item, index) => (
+                                <div
+                                    key={index}
+                                    className="bg-[#2a2a2a] rounded-lg p-4 hover:bg-[#3a3a3a] transition-colors duration-200"
+                                >
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex-1">
+                                            <h4 className="text-lg font-medium mb-1">{item.name}</h4>
+                                            {item.description && (
+                                                <p className="text-sm text-gray-400">{item.description}</p>
+                                            )}
+                                        </div>
+
+                                        <div className="flex flex-col items-end ml-4">
+                                            <span className="text-[#00bfa5] font-semibold mb-2">
+                                                {item.price} RSD
+                                            </span>
+                                            {/* Dugme za omiljeno */}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const key = `${selectedRestaurant.name}-${item.name}`;
+                                                    setFavoriteItems((prev) => ({
+                                                        ...prev,
+                                                        [key]: !prev[key],
+                                                    }));
+                                                }}
+                                                className="text-2xl transition-colors duration-200 hover:scale-110"
+                                            >
+                                                <i
+                                                    className={`fas fa-heart ${
+                                                        favoriteItems[`${selectedRestaurant.name}-${item.name}`]
+                                                            ? "text-red-500"
+                                                            : "text-gray-400"
+                                                    }`}
+                                                ></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </>
+            ) : (
+                <div className="text-center p-10 text-gray-500">Meni nije dostupan.</div>
+            )}
+            
+            {/* Dugme za poziv */}
+            {selectedRestaurant?.phone && (
+                <a
+                    href={`tel:${selectedRestaurant.phone}`}
+                    className="fixed bottom-6 right-6 bg-[#00bfa5] w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:bg-[#00a693] transition-colors z-40"
+                >
+                    <i className="fas fa-phone text-white text-2xl"></i>
+                </a>
+            )}
         </div>
       )}
 

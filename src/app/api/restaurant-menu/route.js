@@ -1,84 +1,57 @@
-async function handler({ restaurantId }) {
-  if (!restaurantId) {
-    return { error: "Restaurant ID je obavezan" };
-  }
+import { neon } from '@neondatabase/serverless';
+import { NextResponse } from 'next/server';
+
+export async function POST(request) {
+  // Povezivanje na Neon bazu
+  const sql = neon(process.env.DATABASE_URL);
 
   try {
-    const menuItems = await sql`
-      SELECT rm.*, r.name as restaurant_name 
-      FROM restaurant_menu rm 
-      JOIN restaurants r ON r.id = rm.restaurant_id 
-      WHERE rm.restaurant_id = ${restaurantId}
-      ORDER BY rm.category, rm.item_name,
-      CASE 
-        WHEN rm.size = 'Porodična' THEN 1
-        WHEN rm.size = 'Standard' THEN 2
-        WHEN rm.size = 'Srednja' THEN 3
-        WHEN rm.size = 'Mini' THEN 4
-        ELSE 5
-      END
-    `;
+    const { restaurantId } = await request.json();
 
-    if (!menuItems.length) {
-      return { menu: {}, restaurantName: null };
+    if (!restaurantId) {
+      return NextResponse.json({ error: "Restaurant ID je obavezan" }, { status: 400 });
     }
 
-    const menuByCategory = menuItems.reduce((acc, item) => {
-      if (!acc[item.category]) {
-        acc[item.category] = [];
-      }
+    // Povlačimo jela i njihove kategorije (koristimo nove tabele: menu_items, menu_categories)
+    const result = await sql`
+        SELECT 
+            mi.name, 
+            mi.description, 
+            mi.price, 
+            mc.name as category_name
+        FROM menu_items mi
+        JOIN menu_categories mc ON mi.category_id = mc.id
+        WHERE mc.restaurant_id = ${restaurantId}
+        ORDER BY mc.id, mi.name
+    `;
 
-      const existingItem = acc[item.category].find(
-        (i) => i.name === item.item_name
-      );
-
-      if (existingItem) {
-        if (!existingItem.sizes) {
-          existingItem.sizes = [
-            {
-              size: existingItem.portion || existingItem.size,
-              price: existingItem.price,
-            },
-          ];
-          delete existingItem.price;
-          delete existingItem.portion;
+    // Formatiramo podatke po kategorijama
+    const menuByCategory = {};
+    
+    result.forEach(item => {
+        const categoryName = item.category_name;
+        if (!menuByCategory[categoryName]) {
+            menuByCategory[categoryName] = [];
         }
-        existingItem.sizes.push({
-          size: item.portion || item.size,
-          price: item.price,
+        menuByCategory[categoryName].push({
+            name: item.name,
+            description: item.description,
+            price: item.price,
+            portion: item.portion // Koristi portion ako postoji
         });
-      } else {
-        const menuItem = {
-          name: item.item_name,
-          description: item.description,
-        };
+    });
 
-        if (item.size || item.category === "Pizza") {
-          menuItem.sizes = [
-            {
-              size: item.portion || item.size,
-              price: item.price,
-            },
-          ];
-        } else {
-          menuItem.price = item.price;
-          menuItem.portion = item.portion;
-        }
+    // Povlačimo ime i radno vreme restorana
+    const restInfo = await sql`SELECT name, hours FROM restaurants WHERE id = ${restaurantId}`;
 
-        acc[item.category].push(menuItem);
-      }
+    return NextResponse.json({ 
+        menu: menuByCategory,
+        restaurantName: restInfo[0]?.name,
+        restaurantHours: restInfo[0]?.hours
+    });
 
-      return acc;
-    }, {});
-
-    return {
-      restaurantName: menuItems[0].restaurant_name,
-      menu: menuByCategory,
-    };
   } catch (error) {
-    return { error: "Problem sa dobijanjem menija" };
+    console.error('Error fetching menu:', error);
+    return NextResponse.json({ error: "Problem sa dobijanjem menija" }, { status: 500 });
   }
-}
-export async function POST(request) {
-  return handler(await request.json());
 }

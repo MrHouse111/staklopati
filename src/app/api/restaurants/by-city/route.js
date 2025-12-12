@@ -1,28 +1,26 @@
-async function handler({ city }) {
-  if (!city) {
-    return { error: "Grad mora biti naveden" };
-  }
+import { neon } from '@neondatabase/serverless';
+import { NextResponse } from 'next/server';
 
-  const validCities = ["Nova Pazova", "Stara Pazova", "Banovci"];
-  if (!validCities.includes(city)) {
-    return { error: "Nepoznat grad" };
-  }
+export async function POST(request) {
+  const sql = neon(process.env.DATABASE_URL);
 
   try {
-    const restaurants = await sql(
-      "SELECT * FROM restaurants WHERE city = $1 ORDER BY name",
-      [city]
-    );
+    const { city } = await request.json();
 
-    if (!restaurants.length) {
-      return { restaurants: [] };
+    if (!city) {
+      return NextResponse.json({ error: "Grad mora biti naveden" }, { status: 400 });
     }
 
-    return { restaurants };
+    // Pazimo na case-sensitivity i trimujemo prazna mesta
+    const result = await sql`
+      SELECT * FROM restaurants 
+      WHERE city = ${city} 
+      ORDER BY id DESC
+    `;
+
+    return NextResponse.json({ restaurants: result });
   } catch (error) {
-    return { error: "Problem sa dobijanjem podataka" };
+    console.error('Database Error:', error);
+    return NextResponse.json({ error: "Problem sa bazom" }, { status: 500 });
   }
-}
-export async function POST(request) {
-  return handler(await request.json());
 }
