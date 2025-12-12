@@ -19,10 +19,10 @@ function MainComponent() {
   const [restaurantError, setRestaurantError] = useState("");
 
   useEffect(() => {
-    if (activeTab === "restaurants") {
+    if (isAuthenticated && activeTab === "restaurants") {
       loadRestaurants();
     }
-  }, [activeTab]);
+  }, [activeTab, isAuthenticated]);
 
   const loadRestaurants = async () => {
     try {
@@ -90,10 +90,11 @@ function MainComponent() {
 
   const verifyPassword = async () => {
     setLoading(true);
+    setError("");
     try {
-      // *** ISPRAVLJENA PUTANJA OVDE ***
       const response = await fetch("/api/verify-admin", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
       });
       
@@ -101,22 +102,22 @@ function MainComponent() {
 
       if (response.ok && data.success) {
         setIsAuthenticated(true);
-        setError("");
       } else {
         setError(data.error || "Pogrešna lozinka");
       }
     } catch (err) {
-      console.error(err);
-      setError("Došlo je do greške pri povezivanju sa serverom");
+      console.error("Login error:", err);
+      setError("Greška pri povezivanju sa serverom");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-          <h1 className="text-2xl font-bold text-center mb-6 font-roboto text-black">
+          <h1 className="text-2xl font-bold text-center mb-6 text-black">
             Admin Panel
           </h1>
           <div className="space-y-4">
@@ -128,7 +129,7 @@ function MainComponent() {
               className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
               onKeyPress={(e) => e.key === "Enter" && verifyPassword()}
             />
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
             <button
               onClick={verifyPassword}
               disabled={loading}
@@ -145,26 +146,39 @@ function MainComponent() {
   return (
     <div className="min-h-screen bg-gray-100 text-black">
       <div className="flex">
-        <div className="w-64 bg-white h-screen shadow-md">
-          <div className="p-4">
+        {/* Sidebar */}
+        <div className="w-64 bg-white h-screen shadow-md fixed left-0 top-0">
+          <div className="p-4 border-b">
             <h1 className="text-xl font-bold">Admin Panel</h1>
           </div>
           <nav className="mt-4">
-            <button onClick={() => setActiveTab("dashboard")} className={`w-full text-left p-3 hover:bg-gray-100 ${activeTab === "dashboard" ? "bg-gray-100" : ""}`}>Dashboard</button>
-            <button onClick={() => setActiveTab("restaurants")} className={`w-full text-left p-3 hover:bg-gray-100 ${activeTab === "restaurants" ? "bg-gray-100" : ""}`}>Restorani</button>
+            <button onClick={() => setActiveTab("dashboard")} className={`w-full text-left p-3 hover:bg-gray-100 ${activeTab === "dashboard" ? "bg-gray-100" : ""}`}>
+              <i className="fas fa-chart-line w-6 text-center"></i> Dashboard
+            </button>
+            <button onClick={() => setActiveTab("restaurants")} className={`w-full text-left p-3 hover:bg-gray-100 ${activeTab === "restaurants" ? "bg-gray-100" : ""}`}>
+              <i className="fas fa-utensils w-6 text-center"></i> Restorani
+            </button>
           </nav>
         </div>
 
-        <div className="flex-1 p-8">
+        {/* Main Content */}
+        <div className="flex-1 p-8 ml-64">
           <div className="bg-white rounded-lg shadow-md p-6">
+            
             {activeTab === "dashboard" && (
-              <div><h2 className="text-xl font-bold mb-4">Dobrodošao!</h2><p>Izaberi opciju levo.</p></div>
+              <div>
+                <h2 className="text-xl font-bold mb-4">Dobrodošao nazad!</h2>
+                <p>Koristi meni sa leve strane za upravljanje sadržajem.</p>
+              </div>
             )}
 
             {activeTab === "restaurants" && (
               <div>
                 <h2 className="text-xl font-bold mb-4">Upravljanje restoranima</h2>
-                <div className="mb-6 space-y-4 p-4 bg-gray-50 rounded">
+                
+                {/* Forma */}
+                <div className="mb-6 space-y-4 p-4 bg-gray-50 rounded border">
+                  <h3 className="font-semibold mb-2">Dodaj novi restoran</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <input type="text" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} className="p-2 border rounded" placeholder="Ime restorana" />
                     <select value={city} onChange={(e) => setCity(e.target.value)} className="p-2 border rounded">
@@ -174,22 +188,33 @@ function MainComponent() {
                     </select>
                     <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} className="p-2 border rounded" placeholder="Adresa" />
                     <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} className="p-2 border rounded" placeholder="Telefon" />
-                    <input type="text" value={workHours} onChange={(e) => setWorkHours(e.target.value)} className="p-2 border rounded md:col-span-2" placeholder="Radno vreme" />
+                    <input type="text" value={workHours} onChange={(e) => setWorkHours(e.target.value)} className="p-2 border rounded md:col-span-2" placeholder="Radno vreme (npr. 08:00 - 23:00)" />
                   </div>
-                  <button onClick={handleAddRestaurant} disabled={restaurantLoading} className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 mt-2">
+                  {restaurantError && <p className="text-red-500 text-sm mt-2">{restaurantError}</p>}
+                  <button onClick={handleAddRestaurant} disabled={restaurantLoading} className="bg-blue-500 text-white py-2 px-6 rounded hover:bg-blue-600 mt-4 font-medium">
                     {restaurantLoading ? 'Dodavanje...' : 'Dodaj restoran'}
                   </button>
                 </div>
+
+                {/* Lista */}
+                <h3 className="font-semibold mb-3 text-lg">Lista restorana</h3>
                 <div className="space-y-2">
+                  {restaurantsList.length === 0 && <p className="text-gray-500">Nema unetih restorana.</p>}
                   {restaurantsList.map((r) => (
-                    <div key={r.id} className="flex justify-between items-center p-3 border rounded hover:bg-gray-50">
-                      <span>{r.name} ({r.city})</span>
-                      <button onClick={() => handleDeleteRestaurant(r.id)} className="text-red-500 hover:text-red-700">Obriši</button>
+                    <div key={r.id} className="flex justify-between items-center p-4 border rounded hover:bg-gray-50 bg-white shadow-sm">
+                      <div>
+                        <p className="font-bold text-lg">{r.name}</p>
+                        <p className="text-sm text-gray-600"><span className="font-medium">{r.city}</span> • {r.address}</p>
+                      </div>
+                      <button onClick={() => handleDeleteRestaurant(r.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1 rounded transition-colors">
+                        Obriši
+                      </button>
                     </div>
                   ))}
                 </div>
               </div>
             )}
+
           </div>
         </div>
       </div>
