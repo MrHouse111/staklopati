@@ -1,28 +1,35 @@
-This project was generated from [anything.com](https://www.anything.com/).
+# Šta Klopati
 
-It is a [Next.js](https://nextjs.org/) project built on React and TailwindCSS.
+Ovaj projekat je razvio Mark House.
+Platforma služi kao digitalni vodič kroz restorane i jelovnike u vašem gradu.
 
-## Getting Started
+Projekat je izgrađen koristeći:
+* [Next.js](https://nextjs.org/) (App Router)
+* [React](https://react.dev/)
+* [TailwindCSS](https://tailwindcss.com/)
+* [Neon Postgres](https://neon.tech/) (Serverless Database)
 
-First, run the development server:
+## Pokretanje Projekta
+
+Prvo, instalirajte zavisnosti:
 
 ```bash
+npm install
+Zatim pokrenite razvojni server:
+
+Bash
+
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Otvorite http://localhost:3000 u vašem browseru da vidite aplikaciju.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Admin panel se nalazi na /admin (zahteva autentifikaciju).
 
-You can start editing the code in `src`. The page auto-updates as you edit the file.
+Struktura Projekta
+src/app: Glavne stranice aplikacije.
 
-To learn more, take a look at the following resources:
+src/api: API rute za komunikaciju sa bazom.
 
-- [React Documentation](https://react.dev/) - learn about React
-- [TailwindCSS Documentation](https://tailwindcss.com/) - learn about TailwindCSS
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+src/components: Reusable UI komponente (Radio player, Banneri...).
+
+Autor
+Mark House Copyright © 2025. Sva prava zadržana.
