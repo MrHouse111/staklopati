@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react"; // <--- Proveri da li OVO stoji tačno ovako!
 
 function MainComponent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -13,7 +13,6 @@ function MainComponent() {
   const [city, setCity] = useState("Nova Pazova");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
-  // NOVI STATE: Za radno vreme
   const [openingTime, setOpeningTime] = useState("08:00"); 
   const [closingTime, setClosingTime] = useState("23:00");
   
@@ -39,7 +38,7 @@ function MainComponent() {
 
   useEffect(() => {
     if (isAuthenticated) {
-        // Učitavanje restorana za oba taba (Restorani i Meni)
+        // Učitavanje restorana za oba taba
         loadRestaurants();
     }
   }, [isAuthenticated]);
@@ -93,7 +92,6 @@ function MainComponent() {
     setRestaurantLoading(true);
     setRestaurantError("");
     try {
-      // PROSLEĐUJEMO NOVE TIME VREDNOSTI
       await fetch("/api/admin/restaurants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -118,7 +116,7 @@ function MainComponent() {
     setRestaurantLoading(false);
   };
 
-  // --- NOVA FUNKCIJA: OTVARANJE MODALA ---
+  // --- OTVARANJE MODALA ---
   const openEditModal = (restaurant) => {
     // Parsiramo HOURS polje (npr. "08:00 - 23:00") na dve vrednosti
     const [openTime, closeTime] = (restaurant.hours || "08:00 - 23:00").split(' - ');
@@ -130,7 +128,7 @@ function MainComponent() {
     setIsEditModalOpen(true);
   };
 
-  // --- NOVA FUNKCIJA: AŽURIRANJE RESTORANA ---
+  // --- AŽURIRANJE RESTORANA ---
   const handleUpdateRestaurant = async () => {
     if (!currentEditRest) return;
     setLoading(true);
@@ -175,7 +173,7 @@ function MainComponent() {
     }
   };
   
-  // --- OSTALE MENI FUNKCIJE SU ISTE ---
+  // --- MENI FUNKCIJE ---
   const handleAddCategory = async () => {
       if (!selectedRestForMenu || !newCategoryName) return;
       setMenuStatus("Dodavanje kategorije...");
@@ -229,7 +227,29 @@ function MainComponent() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-        {/* Login UI je nepromenjen */}
+        <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+          <h1 className="text-2xl font-bold text-center mb-6 text-black">
+            Admin Panel
+          </h1>
+          <div className="space-y-4">
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Unesite admin lozinku"
+              className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+              onKeyPress={(e) => e.key === "Enter" && verifyPassword()}
+            />
+            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+            <button
+              onClick={verifyPassword}
+              disabled={loading}
+              className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition-colors disabled:bg-blue-300"
+            >
+              {loading ? "Provera..." : "Prijavi se"}
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -302,7 +322,7 @@ function MainComponent() {
               </div>
             )}
 
-            {/* TAB MENI I CENOVNIK (PRETHODNO SREĐEN) */}
+            {/* TAB MENI I CENOVNIK */}
             {activeTab === "menu" && (
                 <div>
                     <h2 className="text-xl font-bold mb-4">Uređivanje Menija</h2>
@@ -353,6 +373,40 @@ function MainComponent() {
                             </div>
                         </div>
                     )}
+                    
+                    {/* Pregled Menija */}
+                    {selectedRestForMenu && menuItems.length > 0 && (
+                        <div className="mt-8 border-t pt-4">
+                            <h3 className="font-semibold text-lg border-b pb-2 mb-4">Trenutni Meni</h3>
+                            
+                            {menuCategories.map(cat => {
+                                const items = menuItems.filter(i => i.category_id === cat.id);
+                                if (items.length === 0) return null;
+
+                                return (
+                                    <div key={cat.id} className="mb-6">
+                                        <h4 className="font-bold text-blue-600 mb-2 border-b-2 border-blue-100">{cat.name}</h4>
+                                        <div className="space-y-2">
+                                            {items.map(item => (
+                                                <div key={item.id} className="flex justify-between items-center p-2 bg-white rounded shadow-sm">
+                                                    <div>
+                                                        <span className="font-medium">{item.name}</span>
+                                                        {item.description && <span className="text-gray-500 text-sm ml-2">({item.description})</span>}
+                                                    </div>
+                                                    <div className="flex items-center gap-4">
+                                                        <span className="font-bold text-green-600">{item.price} RSD</span>
+                                                        <button onClick={() => handleDeleteItem(item.id)} className="text-red-500 text-xs hover:text-red-700 p-1 rounded">
+                                                            <i className="fas fa-trash-alt"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             )}
             
@@ -360,9 +414,42 @@ function MainComponent() {
         </div>
       </div>
       
-      {/* MODAL ZA IZMENU RESTORANA */}
-      {/* NOVI MODAL UI (dodajemo ga ovde) */}
-      
+      {/* MODAL ZA IZMENU RESTORANA (Moramo ga dodati na kraj return bloka) */}
+      {isEditModalOpen && currentEditRest && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-lg shadow-2xl w-full max-w-lg">
+            <h2 className="text-xl font-bold mb-4">Izmeni: {currentEditRest.name}</h2>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+                <label className="block text-sm font-medium pt-2">Ime:</label>
+                <input type="text" value={currentEditRest.name} onChange={e => setCurrentEditRest({...currentEditRest, name: e.target.value})} className="p-2 border rounded col-span-1" />
+                
+                <label className="block text-sm font-medium pt-2">Grad:</label>
+                <select value={currentEditRest.city} onChange={e => setCurrentEditRest({...currentEditRest, city: e.target.value})} className="p-2 border rounded col-span-1">
+                    <option value="Nova Pazova">Nova Pazova</option><option value="Stara Pazova">Stara Pazova</option><option value="Banovci">Banovci</option>
+                </select>
+
+                <label className="block text-sm font-medium pt-2">Adresa:</label>
+                <input type="text" value={currentEditRest.address} onChange={e => setCurrentEditRest({...currentEditRest, address: e.target.value})} className="p-2 border rounded col-span-1" />
+
+                <label className="block text-sm font-medium pt-2">Telefon:</label>
+                <input type="text" value={currentEditRest.phone} onChange={e => setCurrentEditRest({...currentEditRest, phone: e.target.value})} className="p-2 border rounded col-span-1" />
+
+                <label className="block text-sm font-medium pt-2">Otvaranje:</label>
+                <input type="time" value={currentEditRest.openingTime} onChange={e => setCurrentEditRest({...currentEditRest, openingTime: e.target.value})} className="p-2 border rounded col-span-1" />
+                
+                <label className="block text-sm font-medium pt-2">Zatvaranje:</label>
+                <input type="time" value={currentEditRest.closingTime} onChange={e => setCurrentEditRest({...currentEditRest, closingTime: e.target.value})} className="p-2 border rounded col-span-1" />
+            </div>
+            
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setIsEditModalOpen(false)} className="bg-gray-300 text-gray-800 px-4 py-2 rounded">Odustani</button>
+              <button onClick={handleUpdateRestaurant} disabled={loading} className="bg-green-600 text-white px-4 py-2 rounded disabled:bg-green-300">
+                {loading ? 'Čuvanje...' : 'Sačuvaj izmene'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
