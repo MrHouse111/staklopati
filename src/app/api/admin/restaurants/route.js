@@ -2,7 +2,6 @@ import { neon } from '@neondatabase/serverless';
 import { NextResponse } from 'next/server';
 
 export async function POST(request) {
-  // Povezivanje na bazu
   const sql = neon(process.env.DATABASE_URL);
 
   try {
@@ -15,18 +14,21 @@ export async function POST(request) {
 
     // --- CREATE (Dodavanje restorana) ---
     if (action === "create") {
-      if (!restaurant?.name || !restaurant?.city || !restaurant?.address) {
-        return NextResponse.json({ error: "Name, city, and address are required" }, { status: 400 });
+      if (!restaurant?.name || !restaurant?.city || !restaurant?.address || !restaurant?.openingTime || !restaurant?.closingTime) {
+        return NextResponse.json({ error: "Svi podaci su obavezni" }, { status: 400 });
       }
 
+      // Spajamo vreme za stari "hours" field za prikaz
+      const hours = `${restaurant.openingTime} - ${restaurant.closingTime}`;
+
       const result = await sql(
-        "INSERT INTO restaurants (name, city, address, phone, delivery_info) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+        "INSERT INTO restaurants (name, city, address, phone, hours) VALUES ($1, $2, $3, $4, $5) RETURNING *",
         [
           restaurant.name,
           restaurant.city,
           restaurant.address,
           restaurant.phone || null,
-          restaurant.delivery_info || null,
+          hours
         ]
       );
 
@@ -35,18 +37,12 @@ export async function POST(request) {
 
     // --- READ (Čitanje restorana) ---
     if (action === "read") {
-      if (restaurant?.id) {
-        const result = await sql("SELECT * FROM restaurants WHERE id = $1", [
-          restaurant.id,
-        ]);
-        return NextResponse.json({ restaurant: result[0] });
-      }
-
-      const result = await sql("SELECT * FROM restaurants ORDER BY name");
+      // NAPOMENA: U SELECT upitu se vraća HOURS, a ne delivery_info
+      const result = await sql('SELECT id, name, city, address, phone, hours FROM restaurants ORDER BY id DESC');
       return NextResponse.json({ restaurants: result });
     }
 
-    // --- UPDATE (Ažuriranje restorana) ---
+    // --- UPDATE (Izmena restorana) ---
     if (action === "update") {
       if (!restaurant?.id) {
         return NextResponse.json({ error: "Restaurant ID is required" }, { status: 400 });
@@ -56,6 +52,19 @@ export async function POST(request) {
       const queryParams = [];
       let paramCount = 1;
 
+      // Logika za spajanje vremena u 'hours' polje
+      if (restaurant.openingTime && restaurant.closingTime) {
+        const hours = `${restaurant.openingTime} - ${restaurant.closingTime}`;
+        setValues.push(`hours = $${paramCount}`);
+        queryParams.push(hours);
+        paramCount++;
+      } else if (restaurant.hours) { // Ako je poslata stara, single vrednost (za svaki slučaj)
+        setValues.push(`hours = $${paramCount}`);
+        queryParams.push(restaurant.hours);
+        paramCount++;
+      }
+
+      // Ostala polja
       if (restaurant.name) {
         setValues.push(`name = $${paramCount}`);
         queryParams.push(restaurant.name);
@@ -76,12 +85,8 @@ export async function POST(request) {
         queryParams.push(restaurant.phone);
         paramCount++;
       }
-      if (restaurant.delivery_info !== undefined) {
-        setValues.push(`delivery_info = $${paramCount}`);
-        queryParams.push(restaurant.delivery_info);
-        paramCount++;
-      }
-
+      // Ako je bilo polje delivery_info, a nema ga, možemo ga preskočiti ili obrisati
+      
       if (setValues.length === 0) {
          return NextResponse.json({ error: "No fields to update" }, { status: 400 });
       }
@@ -101,7 +106,7 @@ export async function POST(request) {
         return NextResponse.json({ error: "Restaurant ID is required" }, { status: 400 });
       }
 
-      await sql("DELETE FROM restaurants WHERE id = $1", [restaurant.id]);
+      await sql('DELETE FROM restaurants WHERE id = $1', [restaurant.id]);
       return NextResponse.json({ success: true });
     }
 
