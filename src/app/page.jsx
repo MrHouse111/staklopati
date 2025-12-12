@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react"; // <--- OVO JE FALILO
 import RadioPlayer from "../components/radio-player";
 import { useUpload } from "../utilities/runtime-helpers";
 
@@ -57,18 +57,33 @@ function MainComponent() {
   const [menuData, setMenuData] = useState(null);
   const [menuLoading, setMenuLoading] = useState(false);
   const [menuError, setMenuError] = useState(null);
-  const [lastSelectedCity, setLastSelectedCity] = useState(() => {
-    return localStorage.getItem("lastSelectedCity") || "";
-  });
+  
+  // Safe localStorage access
+  const [lastSelectedCity, setLastSelectedCity] = useState("");
   const [debugInfo, setDebugInfo] = useState({});
 
+  useEffect(() => {
+    // Provera da li smo na klijentu pre pristupa localStorage-u
+    if (typeof window !== 'undefined') {
+        const savedCity = localStorage.getItem("lastSelectedCity");
+        if (savedCity) {
+            setLastSelectedCity(savedCity);
+            // Opciono: automatski selektuj grad ako postoji
+            // setSelectedCity(savedCity);
+            // setActiveScreen("restaurants");
+            // loadRestaurants(savedCity);
+        }
+    }
+  }, []);
+
+  // Inicijalno učitavanje ako postoji lastSelectedCity
   useEffect(() => {
     if (lastSelectedCity) {
       setSelectedCity(lastSelectedCity);
       setActiveScreen("restaurants");
       loadRestaurants(lastSelectedCity);
     }
-  }, []);
+  }, [lastSelectedCity]);
 
   useEffect(() => {
     const loadMessages = async () => {
@@ -81,8 +96,14 @@ function MainComponent() {
               "SELECT * FROM `chat_messages` ORDER BY created_at DESC LIMIT 50",
           }),
         });
-        const messages = await response.json();
-        setMessages(messages.reverse());
+        // Dodata provera statusa
+        if (response.ok) {
+            const messages = await response.json();
+            // Provera da li je messages niz pre poziva reverse
+            if (Array.isArray(messages)) {
+                setMessages(messages.reverse());
+            }
+        }
       } catch (error) {
         console.error("Error loading messages:", error);
       } finally {
@@ -143,17 +164,25 @@ function MainComponent() {
       const data = await response.json();
 
       const statuses = {};
-      await Promise.all(
-        data.restaurants.map(async (restaurant) => {
-          statuses[restaurant.id] = await checkRestaurantStatus(restaurant.id);
-        })
-      );
-      setRestaurantStatus(statuses);
-
-      setRestaurants((prev) => ({
-        ...prev,
-        [city]: data.restaurants,
-      }));
+      if (data.restaurants && Array.isArray(data.restaurants)) {
+          await Promise.all(
+            data.restaurants.map(async (restaurant) => {
+              statuses[restaurant.id] = await checkRestaurantStatus(restaurant.id);
+            })
+          );
+          setRestaurantStatus(statuses);
+    
+          setRestaurants((prev) => ({
+            ...prev,
+            [city]: data.restaurants,
+          }));
+      } else {
+          // Ako nema restorana, postavljamo prazan niz
+          setRestaurants((prev) => ({
+            ...prev,
+            [city]: [],
+          }));
+      }
     } catch (err) {
       console.error("Error loading restaurants:", err);
       setError("Nije moguće učitati restorane. Molimo pokušajte ponovo.");
@@ -330,56 +359,25 @@ function MainComponent() {
           />
 
           <div className="flex flex-col gap-6 w-full max-w-xs">
+            {["Nova Pazova", "Stara Pazova", "Banovci"].map((city) => (
             <button
+              key={city}
               onClick={() => {
-                setSelectedCity("Nova Pazova");
+                setSelectedCity(city);
                 setActiveScreen("restaurants");
-                loadRestaurants("Nova Pazova");
-                localStorage.setItem("lastSelectedCity", "Nova Pazova");
-                setLastSelectedCity("Nova Pazova");
+                loadRestaurants(city);
+                localStorage.setItem("lastSelectedCity", city);
+                setLastSelectedCity(city);
               }}
               className="group relative bg-gradient-to-r from-[#00bfa5] to-[#00a693] py-4 px-8 rounded-lg text-xl shadow-lg transform transition-all duration-300 hover:scale-105 hover:shadow-xl active:scale-95"
             >
               <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 rounded-lg transition-opacity"></div>
               <div className="flex items-center justify-center gap-3">
                 <i className="fas fa-map-marker-alt"></i>
-                <span>Nova Pazova</span>
+                <span>{city}</span>
               </div>
             </button>
-
-            <button
-              onClick={() => {
-                setSelectedCity("Stara Pazova");
-                setActiveScreen("restaurants");
-                loadRestaurants("Stara Pazova");
-                localStorage.setItem("lastSelectedCity", "Stara Pazova");
-                setLastSelectedCity("Stara Pazova");
-              }}
-              className="group relative bg-gradient-to-r from-[#00bfa5] to-[#00a693] py-4 px-8 rounded-lg text-xl shadow-lg transform transition-all duration-300 hover:scale-105 hover:shadow-xl active:scale-95"
-            >
-              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 rounded-lg transition-opacity"></div>
-              <div className="flex items-center justify-center gap-3">
-                <i className="fas fa-map-marker-alt"></i>
-                <span>Stara Pazova</span>
-              </div>
-            </button>
-
-            <button
-              onClick={() => {
-                setSelectedCity("Banovci");
-                setActiveScreen("restaurants");
-                loadRestaurants("Banovci");
-                localStorage.setItem("lastSelectedCity", "Banovci");
-                setLastSelectedCity("Banovci");
-              }}
-              className="group relative bg-gradient-to-r from-[#00bfa5] to-[#00a693] py-4 px-8 rounded-lg text-xl shadow-lg transform transition-all duration-300 hover:scale-105 hover:shadow-xl active:scale-95"
-            >
-              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 rounded-lg transition-opacity"></div>
-              <div className="flex items-center justify-center gap-3">
-                <i className="fas fa-map-marker-alt"></i>
-                <span>Banovci</span>
-              </div>
-            </button>
+            ))}
           </div>
         </div>
       )}
@@ -525,18 +523,6 @@ function MainComponent() {
                             : "bg-[#2a2a2a] text-gray-300 hover:bg-[#3a3a3a]"
                         }`}
                       >
-                        {category === "Roštilj" && (
-                          <i className="fas fa-fire mr-2"></i>
-                        )}
-                        {category === "Prilozi" && (
-                          <i className="fas fa-utensils mr-2"></i>
-                        )}
-                        {category === "Salate" && (
-                          <i className="fas fa-leaf mr-2"></i>
-                        )}
-                        {category === "Pića" && (
-                          <i className="fas fa-glass-martini mr-2"></i>
-                        )}
                         {category}
                       </button>
                     ))}
@@ -751,225 +737,6 @@ function MainComponent() {
                 ))}
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {activeScreen === "chat" && (
-        <div className="fixed inset-0 bg-[#121212] z-50 flex flex-col">
-          <div className="bg-[#2a2a2a] px-4 py-3 flex items-center justify-between border-b border-gray-700">
-            <div className="flex items-center">
-              <button
-                onClick={() => {
-                  setShowChat(false);
-                  setActiveScreen("cities");
-                }}
-                className="mr-3 text-gray-400 hover:text-white"
-              >
-                <i className="fas fa-arrow-left text-lg"></i>
-              </button>
-              <div>
-                <h2 className="text-lg font-semibold">Grupni Chat</h2>
-                <p className="text-sm text-gray-400">
-                  {messages.length} poruka •{" "}
-                  {new Set(messages.map((m) => m.user_id)).size} učesnika
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="flex-1 overflow-y-auto p-4 space-y-4"
-            id="chat-messages"
-          >
-            {messages.map((msg, index) => {
-              const isFirstInGroup =
-                index === 0 || messages[index - 1].user_id !== msg.user_id;
-              const isLastInGroup =
-                index === messages.length - 1 ||
-                messages[index + 1].user_id !== msg.user_id;
-
-              return (
-                <div
-                  key={index}
-                  className={`flex ${
-                    msg.user_id === user.id ? "justify-end" : "justify-start"
-                  }`}
-                >
-                  <div
-                    className={`max-w-[80%] ${
-                      !isLastInGroup ? "mb-1" : "mb-3"
-                    }`}
-                  >
-                    {isFirstInGroup && (
-                      <div
-                        className={`text-sm mb-1 ${
-                          msg.user_id === user.id
-                            ? "text-right text-gray-300"
-                            : "text-gray-300"
-                        }`}
-                      >
-                        {msg.user_id === user.id
-                          ? "Vi"
-                          : `Korisnik ${msg.user_id.slice(0, 4)}`}
-                      </div>
-                    )}
-                    <div
-                      className={`rounded-2xl px-4 py-2 ${
-                        msg.user_id === user.id
-                          ? "bg-[#00bfa5] text-white rounded-tr-none"
-                          : "bg-[#3a3a3a] text-gray-200 rounded-tl-none"
-                      }`}
-                    >
-                      <p className="text-[15px] leading-tight">{msg.message}</p>
-                      <div className="text-[11px] opacity-70 mt-1">
-                        {new Date(msg.created_at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-
-            {Object.keys(typingUsers).length > 0 && (
-              <div className="flex items-center space-x-2 text-gray-400 text-sm">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></div>
-                </div>
-                <span>
-                  {Object.keys(typingUsers).length === 1
-                    ? `${Object.keys(typingUsers)[0]} kuca...`
-                    : `${Object.keys(typingUsers).length} korisnika kucaju...`}
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="bg-[#2a2a2a] p-3 border-t border-gray-700">
-            {showEmojiPicker && (
-              <div className="absolute bottom-20 right-4 bg-[#3a3a3a] rounded-lg shadow-xl p-2">
-                <div className="grid grid-cols-8 gap-2">
-                  {[
-                    "😊",
-                    "😂",
-                    "❤️",
-                    "👍",
-                    "😍",
-                    "🎉",
-                    "👋",
-                    "🤔",
-                    "😅",
-                    "🙌",
-                    "🤷‍♂️",
-                    "🔥",
-                    "👏",
-                    "💪",
-                    "🙏",
-                    "✨",
-                  ].map((emoji) => (
-                    <button
-                      key={emoji}
-                      onClick={() => {
-                        setNewMessage((prev) => prev + emoji);
-                        setShowEmojiPicker(false);
-                      }}
-                      className="text-2xl hover:bg-[#4a4a4a] p-2 rounded-lg transition-colors"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!newMessage.trim()) return;
-
-                const messageData = {
-                  message: newMessage,
-                  user_id: user.id,
-                  created_at: new Date().toISOString(),
-                };
-
-                try {
-                  setChatLoading(true);
-                  await fetch("/api/db/user-reviews", {
-                    method: "POST",
-                    body: JSON.stringify({
-                      query:
-                        "INSERT INTO `chat_messages` (message, user_id, created_at) VALUES (?, ?, ?)",
-                      values: [
-                        messageData.message,
-                        messageData.user_id,
-                        messageData.created_at,
-                      ],
-                    }),
-                  });
-
-                  setMessages((prev) => [...prev, messageData]);
-                  setNewMessage("");
-                  setTypingUsers((prev) => {
-                    const newTyping = { ...prev };
-                    delete newTyping[user.id];
-                    return newTyping;
-                  });
-
-                  const chatContainer =
-                    document.getElementById("chat-messages");
-                  chatContainer.scrollTop = chatContainer.scrollHeight;
-                } catch (error) {
-                  console.error("Error sending message:", error);
-                  alert("Greška pri slanju poruke. Pokušajte ponovo.");
-                } finally {
-                  setChatLoading(false);
-                }
-              }}
-              className="flex items-center gap-2"
-            >
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  value={newMessage}
-                  onChange={(e) => {
-                    setNewMessage(e.target.value);
-                    if (e.target.value) {
-                      setTypingUsers((prev) => ({ ...prev, [user.id]: true }));
-                      setTimeout(() => {
-                        setTypingUsers((prev) => {
-                          const newTyping = { ...prev };
-                          delete newTyping[user.id];
-                          return newTyping;
-                        });
-                      }, 2000);
-                    }
-                  }}
-                  placeholder="Napišite poruku..."
-                  className="w-full bg-[#3a3a3a] rounded-full px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#00bfa5]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-[#00bfa5] hover:text-[#00a693]"
-                >
-                  <i className="fas fa-smile text-xl"></i>
-                </button>
-              </div>
-
-              <button
-                type="submit"
-                disabled={chatLoading || !newMessage.trim()}
-                className="p-2 bg-[#00bfa5] text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#00a693] transition-colors"
-              >
-                <i className="fas fa-paper-plane text-xl"></i>
-              </button>
-            </form>
           </div>
         </div>
       )}
