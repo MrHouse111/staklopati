@@ -5,7 +5,7 @@ export async function POST(request) {
     const body = await request.json();
     const { password } = body;
 
-    // Ovde koristimo NextResponse JSON format koji je OBAVEZAN za Next.js na Vercelu
+    // Hardkodovana šifra radi jednostavnosti
     if (password === "12345") {
       return NextResponse.json({ success: true }, { status: 200 });
     } else {
@@ -15,7 +15,7 @@ export async function POST(request) {
       );
     }
   } catch (error) {
-    console.error('Admin Login Error:', error);
+    console.error('Login error:', error);
     return NextResponse.json(
       { success: false, error: "Serverska greška" },
       { status: 500 }
