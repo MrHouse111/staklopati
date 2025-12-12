@@ -8,7 +8,7 @@ function MainComponent() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [loading, setLoading] = useState(false);
 
-  // --- Restaurants management state ---
+  // --- State za restorane ---
   const [restaurantName, setRestaurantName] = useState("");
   const [city, setCity] = useState("Nova Pazova");
   const [address, setAddress] = useState("");
@@ -18,12 +18,10 @@ function MainComponent() {
   const [restaurantLoading, setRestaurantLoading] = useState(false);
   const [restaurantError, setRestaurantError] = useState("");
 
-  // Load restaurants when the restaurants tab is active
   useEffect(() => {
     if (activeTab === "restaurants") {
       loadRestaurants();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const loadRestaurants = async () => {
@@ -93,7 +91,7 @@ function MainComponent() {
   const verifyPassword = async () => {
     setLoading(true);
     try {
-      // *** ISPRAVLJENA PUTANJA (bilo je verify-admin-password) ***
+      // *** ISPRAVLJENA PUTANJA OVDE ***
       const response = await fetch("/api/verify-admin", {
         method: "POST",
         body: JSON.stringify({ password }),
@@ -147,7 +145,6 @@ function MainComponent() {
   return (
     <div className="min-h-screen bg-gray-100 text-black">
       <div className="flex">
-        {/* Sidebar */}
         <div className="w-64 bg-white h-screen shadow-md">
           <div className="p-4">
             <h1 className="text-xl font-bold">Admin Panel</h1>
@@ -158,22 +155,15 @@ function MainComponent() {
           </nav>
         </div>
 
-        {/* Main Content */}
         <div className="flex-1 p-8">
           <div className="bg-white rounded-lg shadow-md p-6">
-            
             {activeTab === "dashboard" && (
-              <div>
-                <h2 className="text-xl font-bold mb-4">Dobrodošao nazad!</h2>
-                <p>Izaberi opciju iz menija sa leve strane.</p>
-              </div>
+              <div><h2 className="text-xl font-bold mb-4">Dobrodošao!</h2><p>Izaberi opciju levo.</p></div>
             )}
 
             {activeTab === "restaurants" && (
               <div>
                 <h2 className="text-xl font-bold mb-4">Upravljanje restoranima</h2>
-                
-                {/* Forma */}
                 <div className="mb-6 space-y-4 p-4 bg-gray-50 rounded">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <input type="text" value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)} className="p-2 border rounded" placeholder="Ime restorana" />
@@ -186,27 +176,20 @@ function MainComponent() {
                     <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} className="p-2 border rounded" placeholder="Telefon" />
                     <input type="text" value={workHours} onChange={(e) => setWorkHours(e.target.value)} className="p-2 border rounded md:col-span-2" placeholder="Radno vreme" />
                   </div>
-                  {restaurantError && <p className="text-red-500 text-sm">{restaurantError}</p>}
-                  <button onClick={handleAddRestaurant} disabled={restaurantLoading} className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+                  <button onClick={handleAddRestaurant} disabled={restaurantLoading} className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 mt-2">
                     {restaurantLoading ? 'Dodavanje...' : 'Dodaj restoran'}
                   </button>
                 </div>
-
-                {/* Lista */}
                 <div className="space-y-2">
                   {restaurantsList.map((r) => (
                     <div key={r.id} className="flex justify-between items-center p-3 border rounded hover:bg-gray-50">
-                      <div>
-                        <p className="font-bold">{r.name}</p>
-                        <p className="text-sm text-gray-600">{r.city}, {r.address}</p>
-                      </div>
+                      <span>{r.name} ({r.city})</span>
                       <button onClick={() => handleDeleteRestaurant(r.id)} className="text-red-500 hover:text-red-700">Obriši</button>
                     </div>
                   ))}
                 </div>
               </div>
             )}
-
           </div>
         </div>
       </div>
