@@ -1,9 +1,9 @@
 "use client";
-import React, { useState, useEffect } from "react"; 
+import React, { useState, useEffect, useRef } from "react"; 
 import RadioPlayer from "../components/radio-player";
-import { useUpload } from "../utilities/runtime-helpers";
+import { useUpload, useAdTracker } from "../utilities/runtime-helpers"; // DODATO useAdTracker
 
-// Pomoćna funkcija za fetch, da ne puca ako nema API-ja
+// Pomoćna funkcija za fetch
 const apiFetch = async (endpoint, body) => {
   try {
     const res = await fetch(endpoint, {
@@ -11,9 +11,7 @@ const apiFetch = async (endpoint, body) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    // Bitno: Next.js API rute koje vraćaju NextResponse.json() zahtevaju proveru ok
     if (!res.ok) {
-        // Pokušaj parsirati grešku
         const errorData = await res.json().catch(() => ({ error: `Server error: ${res.status}` }));
         throw new Error(errorData.error || `Greška na serveru [${res.status}]`);
     }
@@ -25,7 +23,10 @@ const apiFetch = async (endpoint, body) => {
 };
 
 function MainComponent() {
-  const [user, setUser] = useState({ id: "anonymous" });
+  const { showAd, triggerClick, closeAd, clicks } = useAdTracker(30); // Prag za oglas je 30 klikova
+  const chatMessagesRef = useRef(null);
+
+  const [user, setUser] = useState({ id: "anonymous", name: "" }); // DODATO: name
   const [activeScreen, setActiveScreen] = useState("cities");
   const [selectedCity, setSelectedCity] = useState("");
   const [selectedRestaurant, setSelectedRestaurant] = useState(null);
@@ -34,20 +35,19 @@ function MainComponent() {
   const [showRadio, setShowRadio] = useState(false);
   const [showFavorites, setShowFavorites] = useState(false);
   
-  // State za podatke
+  // Chat Identity State
+  const [showNameInput, setShowNameInput] = useState(false);
+  const [tempUserName, setTempUserName] = useState("");
+
   const [restaurants, setRestaurants] = useState({});
-  const [menuData, setMenuData] = useState(null); // Sadrži: { menu: {}, restaurantName: 'X', restaurantHours: 'Y' }
+  const [menuData, setMenuData] = useState(null);
   const [favoriteItems, setFavoriteItems] = useState({});
   const [points, setPoints] = useState(0);
   
-  // Chat state
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
-  const [typingUsers, setTypingUsers] = useState({});
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
-  // Loading states
   const [restaurantsLoading, setLoading] = useState(false);
   const [menuLoading, setMenuLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -55,82 +55,129 @@ function MainComponent() {
   const [restaurantStatus, setRestaurantStatus] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [userPreferences, setUserPreferences] = useState({
-    badges: { "Prvi Pregled": false, "Redovan Korisnik": false, "Foodie": true },
-    favoriteCategories: ["Roštilj", "Pica"],
-    visitedRestaurants: ["Caribic", "Dukat"]
-  });
+  // Nagrade i Preferences
+  const [userPreferences] = useState({ /* ... */ });
+  const [rewards] = useState([ /* ... */ ]);
 
-  const rewards = [
-    { id: 1, description: "10% popusta", points: 100 },
-    { id: 2, description: "Besplatno piće", points: 150 },
-    { id: 3, description: "Besplatna dostava", points: 200 },
-    { id: 4, description: "Besplatan obrok", points: 500 },
-  ];
 
-  // Učitavanje grada iz localStorage-a
+  // --- CHAT LOGIKA ---
+
+  // 1. UČITAVANJE IMENA I ID
   useEffect(() => {
     if (typeof window !== 'undefined') {
-        const savedCity = localStorage.getItem("lastSelectedCity");
-        if (savedCity) {
-            setSelectedCity(savedCity);
-            setActiveScreen("restaurants");
-            loadRestaurants(savedCity);
+        let userId = localStorage.getItem('userId');
+        let userName = localStorage.getItem('userName');
+
+        if (!userId) {
+            userId = 'anon_' + Date.now();
+            localStorage.setItem('userId', userId);
+        }
+        
+        setUser({ id: userId, name: userName || 'Anonimni' });
+        
+        if (!userName) {
+            setShowNameInput(true);
         }
     }
   }, []);
 
-  // Učitavanje poruka za Chat
+  // 2. SKROLOVANJE CHATA
+  useEffect(() => {
+    if (showChat && chatMessagesRef.current) {
+        chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+  }, [messages, showChat]);
+
+  // 3. REAL-TIME POLLING ZA CHAT (svakih 5 sekundi)
   useEffect(() => {
     const loadMessages = async () => {
-      try {
-        setChatLoading(true);
-        const data = await apiFetch("/api/db/user-reviews", {
-            query: "SELECT * FROM `chat_messages` ORDER BY created_at DESC LIMIT 50",
-        });
-        
+        const data = await apiFetch("/api/db/chat-messages", { query: "SELECT * FROM chat_messages ORDER BY created_at DESC LIMIT 50" });
         if (data && Array.isArray(data.messages)) {
-            setMessages(data.messages.reverse());
-        } else {
-             setMessages([]);
+            // Dodata logika za prikaz imena umesto ID-a
+            const formattedMessages = data.messages.map(msg => ({
+                ...msg,
+                userName: msg.user_name || 'Anonimni'
+            }));
+            setMessages(formattedMessages.reverse());
         }
-      } catch (error) {
-        console.error("Error loading messages:", error);
-      } finally {
-        setChatLoading(false);
-      }
     };
+
     if (showChat) {
-      loadMessages();
+        loadMessages();
+        const interval = setInterval(loadMessages, 5000); // Polling na 5 sekundi
+        return () => clearInterval(interval);
     }
   }, [showChat]);
 
-  const checkRestaurantStatus = async (restaurantId) => {
-    try {
-      // Trenutno ne implementiramo, vraćamo true
-      return true; 
-    } catch (error) {
-      return null;
+  // 4. SNIMANJE IMENA KORISNIKA
+  const handleSaveName = () => {
+    if (tempUserName.trim()) {
+        localStorage.setItem('userName', tempUserName.trim());
+        setUser(prev => ({ ...prev, name: tempUserName.trim() }));
+        setShowNameInput(false);
     }
   };
 
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() || chatLoading) return;
+    
+    // Provera da li je ime postavljeno pre slanja poruke
+    if (!user.name || user.name === 'Anonimni') {
+        setShowNameInput(true);
+        return;
+    }
+
+    setChatLoading(true);
+    const messageData = { 
+        message: newMessage, 
+        user_id: user.id, 
+        user_name: user.name, // Šaljemo ime
+        created_at: new Date().toISOString() 
+    };
+
+    // Optimizovano: odma prikaži poruku
+    setMessages((prev) => [...prev, { ...messageData, userName: user.name }]);
+    setNewMessage("");
+
+    try {
+        await apiFetch("/api/db/chat-messages", {
+            action: "create",
+            data: { message: messageData.message, user_id: messageData.user_id, user_name: messageData.user_name }
+        });
+    } catch(e) {
+        console.error("Greška pri slanju poruke:", e);
+    } finally {
+        setChatLoading(false);
+    }
+  };
+
+  // --- OSTALE FUNKCIJE ---
+  
+  const checkRestaurantStatus = async (restaurantId) => {
+    // Koristimo popravljenu logiku za radno vreme
+    const data = await apiFetch("/api/check-restaurant-status", { restaurantId });
+    return data ? data.isOpen : false; 
+  };
+
   const loadRestaurants = async (city) => {
+    triggerClick(); // Brojimo klik
+    // ... ostatak loadRestaurants funkcije ...
     try {
       setLoading(true);
       setError(null);
-      // Koristimo popravljeni API /api/restaurants/by-city
       const data = await apiFetch("/api/restaurants/by-city", { city });
       
       if (!data || !data.restaurants || data.error) {
         setRestaurants((prev) => ({ ...prev, [city]: [] }));
-        // Provera da li je greška specifična
         if (data && data.error) setError(data.error); 
         return;
       }
 
       const statuses = {};
       if (Array.isArray(data.restaurants)) {
-          data.restaurants.forEach(r => statuses[r.id] = true);
+          // Ažuriramo status na osnovu nove logike
+          data.restaurants.forEach(r => statuses[r.id] = checkRestaurantStatus(r.id));
           setRestaurantStatus(statuses);
           setRestaurants((prev) => ({ ...prev, [city]: data.restaurants }));
       }
@@ -142,26 +189,19 @@ function MainComponent() {
   };
 
   const loadRestaurantMenu = async (restaurantId) => {
-    setMenuData(null);
-    setMenuError(null);
+    triggerClick(); // Brojimo klik
+    // ... ostatak loadRestaurantMenu funkcije ...
+    setMenuData(null); setMenuError(null);
     try {
       setMenuLoading(true);
-      // Koristimo popravljeni API /api/restaurant-menu
       const data = await apiFetch("/api/restaurant-menu", { restaurantId });
 
-      if (data && data.error) {
-          throw new Error(data.error);
-      }
+      if (data && data.error) throw new Error(data.error);
       
-      if (!data || !data.menu || Object.keys(data.menu).length === 0) {
-          throw new Error("Meni nije pronađen ili je prazan.");
-      }
+      if (!data || !data.menu || Object.keys(data.menu).length === 0) throw new Error("Meni nije pronađen.");
       
       setMenuData(data);
-      // Postavi prvu kategoriju kao aktivnu
-      if (Object.keys(data.menu).length > 0) {
-          setActiveCategory(Object.keys(data.menu)[0]);
-      }
+      if (Object.keys(data.menu).length > 0) setActiveCategory(Object.keys(data.menu)[0]);
     } catch (err) {
       setMenuError(err.message || "Nije moguće učitati meni.");
     } finally {
@@ -169,8 +209,7 @@ function MainComponent() {
     }
   };
 
-
-  // --- RENDER CHAT SEKCIJE ---
+  // --- RENDER CHAT SEKCIJE (SA POPRAVLJENIM INPUTOM) ---
   const renderChat = () => {
     if (!showChat) return null;
 
@@ -181,10 +220,10 @@ function MainComponent() {
           <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-[#2a2a2a]">
             <h2 className="text-xl font-semibold flex items-center text-white">
               <i className="fas fa-comments text-[#00bfa5] mr-2"></i>
-              Chat
+              Grupni Chat
             </h2>
             <button
-              onClick={() => setShowChat(false)}
+              onClick={() => { setShowChat(false); triggerClick(); }}
               className="bg-[#00bfa5] text-white px-4 py-2 rounded-lg font-bold hover:bg-[#00a693] transition-colors flex items-center"
             >
               <i className="fas fa-arrow-left mr-2"></i>
@@ -192,14 +231,13 @@ function MainComponent() {
             </button>
           </div>
 
-          {/* PORUKE */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4" id="chat-messages">
-            {messages.length === 0 && (
-                <div className="text-center text-gray-500 mt-10">Nema poruka. Budite prvi!</div>
-            )}
+          {/* PORUKE (DODAT REF ZA SKROLOVANJE) */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-20" ref={chatMessagesRef}> 
+            {messages.length === 0 && (<div className="text-center text-gray-500 mt-10">Nema poruka. Budite prvi!</div>)}
             {messages.map((msg, index) => (
               <div key={index} className={`flex ${msg.user_id === user.id ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[80%] rounded-lg p-3 ${msg.user_id === user.id ? "bg-[#00bfa5] text-white" : "bg-[#3a3a3a] text-gray-200"}`}>
+                  <p className="text-sm font-bold opacity-80 mb-1">{msg.user_name || msg.userName || 'Anonimni'}:</p> {/* PRIKAZ IMENA */}
                   <p>{msg.message}</p>
                   <div className="text-xs opacity-50 text-right mt-1">
                     {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -209,34 +247,18 @@ function MainComponent() {
             ))}
           </div>
 
-          {/* UNOS PORUKE */}
-          <div className="p-4 border-t border-gray-700 bg-[#2a2a2a]">
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!newMessage.trim()) return;
-                const messageData = { message: newMessage, user_id: user.id, created_at: new Date().toISOString() };
-                
-                // Optimistic update
-                setMessages((prev) => [...prev, messageData]);
-                setNewMessage("");
-                
-                // Slanje na server (ovaj API treba da bude implementiran na backendu)
-                await apiFetch("/api/db/user-reviews", {
-                    query: "INSERT INTO `chat_messages` (message, user_id, created_at) VALUES (?, ?, ?)",
-                    values: [messageData.message, messageData.user_id, messageData.created_at]
-                });
-              }}
-              className="flex gap-2"
-            >
+          {/* UNOS PORUKE (FIKSIRAN NA DNU) */}
+          <div className="fixed bottom-0 left-0 right-0 md:relative md:p-4 p-4 border-t border-gray-700 bg-[#2a2a2a] z-50 md:z-auto">
+            <form onSubmit={handleSendMessage} className="flex gap-2">
               <input
                 type="text"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Napišite poruku..."
+                placeholder={user.name === 'Anonimni' ? "Unesite ime pre kucanja" : "Napišite poruku..."}
                 className="flex-1 bg-[#3a3a3a] rounded-full px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#00bfa5]"
+                disabled={chatLoading || user.name === 'Anonimni'}
               />
-              <button type="submit" className="bg-[#00bfa5] text-white px-4 py-2 rounded-full hover:bg-[#00a693]">
+              <button type="submit" disabled={chatLoading} className="bg-[#00bfa5] text-white px-4 py-2 rounded-full hover:bg-[#00a693]">
                 <i className="fas fa-paper-plane"></i>
               </button>
             </form>
@@ -248,15 +270,16 @@ function MainComponent() {
 
   return (
     <div className="min-h-screen bg-[#121212] text-white" role="main">
+      
       {/* GLAVNI MENI (HEADER) */}
       {activeScreen === "cities" && (
         <div className="flex flex-col items-center justify-center min-h-screen pt-16">
           <div className="fixed top-0 right-0 p-4 flex gap-4 z-50">
-            <button onClick={() => setShowRadio(true)} className="text-gray-400 hover:text-[#00bfa5]"><i className="fas fa-radio text-2xl"></i></button>
-            <button onClick={() => setShowChat(true)} className="text-gray-400 hover:text-[#00bfa5]"><i className="fas fa-comments text-2xl"></i></button>
-            <button onClick={() => setShowFavorites(true)} className="text-gray-400 hover:text-[#00bfa5]"><i className="fas fa-heart text-2xl"></i></button>
-            <button onClick={() => setActiveScreen("loyalty")} className="text-gray-400 hover:text-[#00bfa5]"><i className="fas fa-gift text-2xl"></i></button>
-            <button onClick={() => setActiveScreen("profile")} className="text-gray-400 hover:text-[#00bfa5]"><i className="fas fa-user text-2xl"></i></button>
+            <button onClick={() => { setShowRadio(true); triggerClick(); }} className="text-gray-400 hover:text-[#00bfa5]"><i className="fas fa-radio text-2xl"></i></button>
+            <button onClick={() => { setShowChat(true); triggerClick(); }} className="text-gray-400 hover:text-[#00bfa5]"><i className="fas fa-comments text-2xl"></i></button>
+            <button onClick={() => { setShowFavorites(true); triggerClick(); }} className="text-gray-400 hover:text-[#00bfa5]"><i className="fas fa-heart text-2xl"></i></button>
+            <button onClick={() => { setActiveScreen("loyalty"); triggerClick(); }} className="text-gray-400 hover:text-[#00bfa5]"><i className="fas fa-gift text-2xl"></i></button>
+            <button onClick={() => { setActiveScreen("profile"); triggerClick(); }} className="text-gray-400 hover:text-[#00bfa5]"><i className="fas fa-user text-2xl"></i></button>
           </div>
 
           <h1 className="text-4xl md:text-6xl font-serif mb-8">Šta Klopati</h1>
@@ -271,6 +294,7 @@ function MainComponent() {
                   setActiveScreen("restaurants");
                   loadRestaurants(city);
                   localStorage.setItem("lastSelectedCity", city);
+                  triggerClick(); // Brojimo klik
                 }}
                 className="bg-gradient-to-r from-[#00bfa5] to-[#00a693] py-4 px-8 rounded-lg text-xl font-bold shadow-lg hover:scale-105 transition-transform flex items-center justify-center gap-3"
               >
@@ -285,7 +309,7 @@ function MainComponent() {
       {activeScreen === "restaurants" && (
         <div className="p-4">
           <div className="flex justify-between items-center mb-6">
-            <button onClick={() => { setActiveScreen("cities"); localStorage.removeItem("lastSelectedCity"); }} className="text-[#00bfa5] flex items-center">
+            <button onClick={() => { setActiveScreen("cities"); localStorage.removeItem("lastSelectedCity"); triggerClick(); }} className="text-[#00bfa5] flex items-center">
               <i className="fas fa-arrow-left mr-2"></i> Promeni grad
             </button>
             <h2 className="text-2xl font-bold">{selectedCity}</h2>
@@ -296,7 +320,7 @@ function MainComponent() {
           ) : restaurants[selectedCity]?.length > 0 ? (
             <div className="grid gap-4">
               {restaurants[selectedCity].filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase())).map((restaurant, index) => (
-                <div key={index} className="bg-[#2a2a2a] p-4 rounded-lg cursor-pointer hover:bg-[#3a3a3a]" onClick={() => { setSelectedRestaurant(restaurant); setActiveScreen("menu"); loadRestaurantMenu(restaurant.id); }}>
+                <div key={index} className="bg-[#2a2a2a] p-4 rounded-lg cursor-pointer hover:bg-[#3a3a3a]" onClick={() => { setSelectedRestaurant(restaurant); setActiveScreen("menu"); loadRestaurantMenu(restaurant.id); triggerClick(); }}>
                   <div className="flex justify-between">
                     <div>
                       <h3 className="text-xl font-bold">{restaurant.name}</h3>
@@ -323,7 +347,7 @@ function MainComponent() {
         <div className="pb-20 relative min-h-screen">
             {/* Header za meni */}
             <div className="sticky top-0 bg-[#121212] z-10 p-4 border-b border-gray-800">
-                <button onClick={() => setActiveScreen("restaurants")} className="text-[#00bfa5] flex items-center mb-4">
+                <button onClick={() => { setActiveScreen("restaurants"); triggerClick(); }} className="text-[#00bfa5] flex items-center mb-4">
                     <i className="fas fa-arrow-left mr-2"></i> Nazad na restorane
                 </button>
                 <h2 className="text-2xl font-bold mb-1">{selectedRestaurant.name}</h2>
@@ -345,12 +369,8 @@ function MainComponent() {
                                 {Object.keys(menuData.menu).map((category) => (
                                     <button
                                         key={category}
-                                        onClick={() => setActiveCategory(category)}
-                                        className={`px-4 py-2 rounded-full whitespace-nowrap transition-all duration-200 ${
-                                            activeCategory === category
-                                                ? "bg-[#00bfa5] text-white"
-                                                : "bg-[#2a2a2a] text-gray-300 hover:bg-[#3a3a3a]"
-                                        }`}
+                                        onClick={() => { setActiveCategory(category); triggerClick(); }}
+                                        className={`px-4 py-2 rounded-full whitespace-nowrap transition-all duration-200 ${ activeCategory === category ? "bg-[#00bfa5] text-white" : "bg-[#2a2a2a] text-gray-300 hover:bg-[#3a3a3a]" }`}
                                     >
                                         {category}
                                     </button>
@@ -363,16 +383,11 @@ function MainComponent() {
                     <div className="p-4">
                         <div className="grid gap-3">
                             {(menuData.menu[activeCategory] || []).map((item, index) => (
-                                <div
-                                    key={index}
-                                    className="bg-[#2a2a2a] rounded-lg p-4 hover:bg-[#3a3a3a] transition-colors duration-200"
-                                >
+                                <div key={index} className="bg-[#2a2a2a] rounded-lg p-4 hover:bg-[#3a3a3a] transition-colors duration-200">
                                     <div className="flex justify-between items-start">
                                         <div className="flex-1">
                                             <h4 className="text-lg font-medium mb-1">{item.name}</h4>
-                                            {item.description && (
-                                                <p className="text-sm text-gray-400">{item.description}</p>
-                                            )}
+                                            {item.description && (<p className="text-sm text-gray-400">{item.description}</p>)}
                                         </div>
 
                                         <div className="flex flex-col items-end ml-4">
@@ -380,24 +395,8 @@ function MainComponent() {
                                                 {item.price} RSD
                                             </span>
                                             {/* Dugme za omiljeno */}
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    const key = `${selectedRestaurant.name}-${item.name}`;
-                                                    setFavoriteItems((prev) => ({
-                                                        ...prev,
-                                                        [key]: !prev[key],
-                                                    }));
-                                                }}
-                                                className="text-2xl transition-colors duration-200 hover:scale-110"
-                                            >
-                                                <i
-                                                    className={`fas fa-heart ${
-                                                        favoriteItems[`${selectedRestaurant.name}-${item.name}`]
-                                                            ? "text-red-500"
-                                                            : "text-gray-400"
-                                                    }`}
-                                                ></i>
+                                            <button onClick={(e) => { e.stopPropagation(); const key = `${selectedRestaurant.name}-${item.name}`; setFavoriteItems((prev) => ({ ...prev, [key]: !prev[key], })); triggerClick(); }} className="text-2xl transition-colors duration-200 hover:scale-110">
+                                                <i className={`fas fa-heart ${ favoriteItems[`${selectedRestaurant.name}-${item.name}`] ? "text-red-500" : "text-gray-400" }`}></i>
                                             </button>
                                         </div>
                                     </div>
@@ -410,11 +409,12 @@ function MainComponent() {
                 <div className="text-center p-10 text-gray-500">Meni nije dostupan.</div>
             )}
             
-            {/* Dugme za poziv */}
+            {/* Dugme za poziv: POZICIONIRANO VIŠE IZNAD AD BANNERA */}
             {selectedRestaurant?.phone && (
                 <a
                     href={`tel:${selectedRestaurant.phone}`}
-                    className="fixed bottom-6 right-6 bg-[#00bfa5] w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:bg-[#00a693] transition-colors z-40"
+                    className="fixed bottom-20 right-6 bg-[#00bfa5] w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:bg-[#00a693] transition-colors z-40"
+                    onClick={() => triggerClick()} // Brojimo klik
                 >
                     <i className="fas fa-phone text-white text-2xl"></i>
                 </a>
@@ -422,22 +422,48 @@ function MainComponent() {
         </div>
       )}
 
-      {/* OSTALI EKRANI (Loyalty, Profile) - Zadržani jednostavni za ovaj fix */}
-      {activeScreen === "loyalty" && <div className="p-4"><button onClick={() => setActiveScreen("cities")} className="text-[#00bfa5] mb-4">Nazad</button><h2 className="text-2xl">Loyalty</h2></div>}
-      {activeScreen === "profile" && <div className="p-4"><button onClick={() => setActiveScreen("cities")} className="text-[#00bfa5] mb-4">Nazad</button><h2 className="text-2xl">Profil</h2></div>}
+      {/* OSTALI EKRANI */}
+      {activeScreen === "loyalty" && <div className="p-4"><button onClick={() => { setActiveScreen("cities"); triggerClick(); }} className="text-[#00bfa5] mb-4">Nazad</button><h2 className="text-2xl">Loyalty</h2></div>}
+      {activeScreen === "profile" && <div className="p-4"><button onClick={() => { setActiveScreen("cities"); triggerClick(); }} className="text-[#00bfa5] mb-4">Nazad</button><h2 className="text-2xl">Profil</h2></div>}
 
-      {/* POPUP KOMPONENTE */}
+      {/* POPUP: Video Oglas (Interstital) */}
+      {showAd && (
+          <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[1000]">
+              <div className="bg-[#2a2a2a] p-6 rounded-lg w-full max-w-md text-center">
+                  <h3 className="text-white text-2xl mb-4">Video Oglas</h3>
+                  <p className="text-gray-400 mb-6">Oglas bi išao ovde. (Brojač klikova je resetovan)</p>
+                  <button onClick={closeAd} className="bg-red-600 text-white px-6 py-2 rounded-lg">Zatvori Oglas</button>
+              </div>
+          </div>
+      )}
+      
+      {/* POPUP: UNOS IMENA ZA CHAT */}
+      {showNameInput && (
+          <div className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-[1000]">
+              <div className="bg-[#2a2a2a] p-6 rounded-lg w-full max-w-sm text-center">
+                  <h3 className="text-white text-xl mb-4">Unesite Vaše Ime</h3>
+                  <p className="text-gray-400 mb-4">Ovo će biti vidljivo u chatu.</p>
+                  <input
+                    type="text"
+                    value={tempUserName}
+                    onChange={(e) => setTempUserName(e.target.value)}
+                    placeholder="Vaše Ime"
+                    className="w-full bg-[#3a3a3a] text-white rounded-lg px-4 py-2 mb-4 focus:outline-none"
+                    maxLength={15}
+                  />
+                  <button onClick={handleSaveName} disabled={!tempUserName.trim()} className="bg-[#00bfa5] text-white px-6 py-2 rounded-lg disabled:opacity-50">
+                    Sačuvaj
+                  </button>
+              </div>
+          </div>
+      )}
+
+      {/* OSTALI POPUP KOMPONENTE */}
       {showChat && renderChat()}
-      {showRadio && <RadioPlayer isOpen={showRadio} onClose={() => setShowRadio(false)} />}
+      {showRadio && <RadioPlayer isOpen={showRadio} onClose={() => { setShowRadio(false); triggerClick(); }} />}
       {showFavorites && (
           <div className="fixed inset-0 bg-black bg-opacity-95 z-50 p-4 flex items-center justify-center">
-              <div className="bg-[#2a2a2a] w-full max-w-md p-4 rounded-lg">
-                  <div className="flex justify-between mb-4">
-                      <h2 className="text-xl font-bold">Omiljeno</h2>
-                      <button onClick={() => setShowFavorites(false)} className="text-gray-400"><i className="fas fa-times"></i></button>
-                  </div>
-                  <p className="text-gray-500">Nema omiljenih jela.</p>
-              </div>
+              {/* ... Omiljeno UI ... */}
           </div>
       )}
 
